@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: Apache-2.0
+from pathlib import Path
+from contextlib import AbstractContextManager
 
 import math
 from typing import Iterator, Any, Iterable
@@ -259,3 +261,32 @@ def reduce_shape(shape: Shape, axis=None) -> Shape:
     ndim = len(shape)
     axis = np.sort([a if a >= 0 else a + ndim for a in axis])
     return Shape(v for ii, v in enumerate(shape) if ii not in axis)
+
+
+class FileGuard(AbstractContextManager):
+    def __init__(
+        self,
+        *paths: Path,
+        delete_on_failure: bool = True,
+        check_exist_on_success: bool = True,
+    ):
+        self.paths = paths
+        self.delete_on_failure = delete_on_failure
+        self.check_exist_on_success = check_exist_on_success
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type is not None:
+            if self.delete_on_failure:
+                for path in self.paths:
+                    path.unlink(missing_ok=True)
+        elif self.check_exist_on_success:
+            nonexisting_files = [str(path) for path in self.paths if not path.exists()]
+            if len(nonexisting_files) != 0:
+                raise FileNotFoundError(
+                    f"Expected the following files to exists, but did not: {', '.join(nonexisting_files)}"
+                )
+
+        return False
