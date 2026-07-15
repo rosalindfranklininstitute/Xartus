@@ -80,6 +80,43 @@ def test_full_convert(nx_file, imzml_files, man_data):
             assert np.all(man_data.dense[*coords[0:2], :] == int_values[:])
 
 
+def test_full_convert_one_indexed(nx_file, imzml_files, man_data):
+
+    man_data_source = man_source.ManSource(man_data)
+
+    convert_args = data_convert.ProcessArgs(
+        in_path=Path(__file__).parent / "data" / "Man1.txt",
+        out_path=nx_file,
+        chunk_max_byte_count=1024 * 1024,
+        memory_max_byte_count=1024 * 1024 * 1024,
+        data_source=man_data_source,
+    )
+    data_convert.process(convert_args, {})
+    assert nx_file.exists()
+
+    imzml_args = imzml.ProcessArgs(
+        in_path=nx_file,
+        out_path=imzml_files[0],
+        entry_name="images",
+        signal="signal",
+        mass="mz",
+        x_axis=0,
+        y_axis=1,
+        z_axis=-1,
+        mz_axis=2,
+        one_indexed=True,
+    )
+    imzml.process(imzml_args, {})
+    assert imzml_files[0].exists()
+    assert imzml_files[1].exists()
+
+    with ImzMLParser(filename=imzml_files[0]) as imzml_data:
+        for ii, coords in enumerate(imzml_data.coordinates):
+            mz_values, int_values = imzml_data.getspectrum(ii)
+            coords = tuple(cc - 1 for cc in coords)
+            assert np.all(man_data.dense[*coords[0:2], :] == int_values[:])
+
+
 def test_swap_x_y(nx_file, imzml_files, man_data):
 
     man_data_source = man_source.ManSource(man_data)
