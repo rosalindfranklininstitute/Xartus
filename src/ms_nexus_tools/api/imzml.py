@@ -78,9 +78,6 @@ class ProcessArgs(ConfigFileArgs, InteractiveArgs):
     )
 
 
-from icecream import ic
-
-
 def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
 
     nx_file = NexusFile(args.in_path, mode="r")
@@ -152,7 +149,7 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
                     range(shape[args.z_axis]) if args.z_axis >= 0 else [0],
                 )
             ]
-            for coords in tqdm(xyz):
+            for coords in tqdm(xyz, desc="Writing imzML"):
                 fill = 1 if args.one_indexed else 0
                 result_inx: list[int | slice] = [fill] * required_ndim
                 result_inx[args.x_axis] = coords[0]
@@ -162,7 +159,6 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
                 if args.z_axis >= 0:
                     result_inx[args.z_axis] = coords[2]
 
-                ic(args.entry_name, args.signal, result_inx)
                 intensity = (
                     nx.root.entry[args.entry_name]
                     .data[args.signal][*result_inx]
