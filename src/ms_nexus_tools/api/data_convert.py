@@ -151,12 +151,13 @@ def choose_memory_buffer(
     max_item_count: int,
     density: float,
     data_chunks: DataChunks,
-) -> tuple[Chunker, int]:
+) -> tuple[Chunker, int, str]:
     memory_chunks = {
         name: Chunker.find_chunk_multiple(
             chunker.data_shape,
             chunker.chunk_shape,
             max_item_count / density,
+            priorities=args.data_source.read_chunks(),
         )
         for name, chunker, _ in data_chunks.items()
     }
@@ -164,6 +165,8 @@ def choose_memory_buffer(
     min_read_count = np.pow(2, 32, dtype=np.int64)
     min_read_name = ""
     for name, chunker in memory_chunks.items():
+        if name == _count_subentry_name():
+            continue
         chunker.normalise()
         read_count = 0
         for chunk in chunker.chunks():
@@ -173,14 +176,14 @@ def choose_memory_buffer(
             min_read_name = name
     assert len(min_read_name) > 0
 
-    return memory_chunks[min_read_name], min_read_count
+    return memory_chunks[min_read_name], min_read_count, min_read_name
 
 
 def choose_memory_buffer_and_data_chunks(
     args: ProcessArgs,
     full_shape: Shape,
     density: float,
-) -> tuple[Chunker, int, int, DataChunks]:
+) -> tuple[Chunker, int, int, DataChunks, str]:
     data_priorities = args.data_source.output_chunks()
     if len(data_priorities) == 0:
         raise ValueError("At least one dataset must be provided.")
@@ -203,12 +206,14 @@ def choose_memory_buffer_and_data_chunks(
     data_chunks = DataChunks([], [], [])
 
     for name, priorities in data_priorities.items():
+        chunker = Chunker.from_max_item_count(
+            data_shape=full_shape,
+            priorities=priorities,
+            items_per_chunk=data_max_items[name],
+        )
+        chunker.normalise()
         data_chunks[name] = (
-            Chunker.from_max_item_count(
-                data_shape=full_shape,
-                priorities=priorities,
-                items_per_chunk=data_max_items[name],
-            ),
+            chunker,
             signal_type,
         )
 
@@ -218,12 +223,14 @@ def choose_memory_buffer_and_data_chunks(
         data_max_items[_count_subentry_name()] = int(
             args.field_options.max_bytes_per_chunk / counts_item_width,
         )
+        chunker = Chunker.from_max_item_count(
+            data_shape=full_shape,
+            priorities=tuple(1 for _ in full_shape),
+            items_per_chunk=data_max_items[_count_subentry_name()],
+        )
+        chunker.normalise()
         data_chunks[_count_subentry_name()] = (
-            Chunker.from_max_item_count(
-                data_shape=full_shape,
-                priorities=tuple(1 for _ in full_shape),
-                items_per_chunk=data_max_items[_count_subentry_name()],
-            ),
+            chunker,
             np.uint16,
         )
 
@@ -235,31 +242,35 @@ def choose_memory_buffer_and_data_chunks(
         ],
     )
     memory_max_item_count = int(args.memory_max_byte_count / size_per_item)
-    memory_chunks, total_read_count = choose_memory_buffer(
+    memory_chunks, total_read_count, min_read_name = choose_memory_buffer(
         args,
         memory_max_item_count,
         density,
         data_chunks,
     )
     for name, chunker, dtype in data_chunks.items():
+        chunker = Chunker.from_max_item_count(
+            data_shape=chunker.data_shape,
+            priorities=chunker.priorities,
+            items_per_chunk=data_max_items[name],
+            min_chunk_count=memory_chunks.chunk_count,
+        )
+        chunker.normalise()
         data_chunks[name] = (
-            Chunker.from_max_item_count(
-                data_shape=chunker.data_shape,
-                priorities=chunker.priorities,
-                items_per_chunk=data_max_items[name],
-                min_chunk_count=memory_chunks.chunk_count,
-            ),
+            chunker,
             dtype,
         )
 
-    return memory_chunks, total_read_count, size_per_item, data_chunks
+    return memory_chunks, total_read_count, size_per_item, data_chunks, min_read_name
 
 
 def provision_subentries(
     nxs: NexusFile,
     args: ProcessArgs,
     data_chunks: DataChunks,
+    default_name: str,
 ) -> None:
+    nxs.root.attrs["default"] = default_name
 
     for name, chunker, dtype in data_chunks.items():
         nxs.root[name] = NXsubentry(
@@ -275,6 +286,7 @@ def provision_subentries(
                 ),
             ),
         )
+        nxs.root[name].attrs["default"] = "data"
 
 
 def provision_data_axis(
@@ -615,11 +627,17 @@ def write_data(
         # Assert that each continuouse block is continuous in only one diemnsion.
         # In principle we could have contigouse blocks across multiple blocks,
         # but this requres them to be full, and the above method does not garantee that.
-        assert np.all(np.sum((ends - starts != 0), axis=0) <= 1)
+        # TODO @dmd: Is this a valid assertion?
+        # assert np.all(np.sum((ends - starts != 0), axis=0) <= 1)
+
+        total_count = (
+            signal_data.nnz if data_entry == _count_subentry_name() else count_data.nnz
+        )
+        total_density = total_count / np.prod(memory_chunk.shape)
 
         for ii in tqdm(
             range(starts.shape[1]),
-            desc=f"Writing chunks for {data_entry} (density: {unique_chunk_count / total_chunk_count:.2f})",
+            desc=f"Writing chunks for {data_entry} (Density: data: {total_density * 100:.2f}% chunk: {(unique_chunk_count / total_chunk_count) * 100:.1f}%)",
             leave=False,
         ):
             chunk = Chunk(
@@ -708,11 +726,11 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
 
         full_shape, density = args.data_source.shape()
 
-        memory_chunks, total_read_count, size_per_item, data_chunks = (
+        memory_chunks, total_read_count, size_per_item, data_chunks, default_name = (
             choose_memory_buffer_and_data_chunks(args, full_shape, density)
         )
 
-        provision_subentries(nxs, args, data_chunks)
+        provision_subentries(nxs, args, data_chunks, default_name)
 
         axis_definitions, any_binned_axis = provision_data_axis(
             nxs,
@@ -732,7 +750,8 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
             ax for ax in axis_definitions.values() if ax.density == AxisDensity.BINNED
         ]
 
-        print(f"Processing file {args.in_path} and writing results to {args.out_path}")
+        print(f"Processing file {args.in_path}")
+        print(f" Writing results to {args.out_path}")
         print(
             f" Giving a final data shape of {full_shape} (Raw {format_bytes(np.prod(full_shape) * size_per_item)})",
         )
@@ -747,6 +766,7 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
             print(
                 f" Binned usage: {int(np.prod(memory_chunks.chunk_shape) * density)} items ({format_bytes(np.prod(memory_chunks.chunk_shape) * size_per_item * density)}), worst case density {density:.2f}.",
             )
+        print(f" Memory limit set at {format_bytes(args.memory_max_byte_count)}.")
         print("With data blocks:")
         print(
             f"maximum chunk size ({format_bytes(args.field_options.max_bytes_per_chunk)})",

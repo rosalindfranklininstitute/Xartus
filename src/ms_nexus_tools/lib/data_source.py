@@ -85,6 +85,16 @@ class AbstractDataSource(AbstractContextManager):
         'spectra':  (2,2,1) -> (1,1,184000)
         """
 
+    def read_chunks(self) -> list[Shape] | None:
+        """
+        Retruns a list of chunking priorities taht can be used for reading the raw data.
+        This is used in conjunction with chunk_read_count to select the most efficient reading scheme, and to track progress.
+        If this returns None, then the priorities from the output_chunks are used.
+
+        This is not an abstract method and defaults to returning None.
+        """
+        return None
+
     @abstractmethod
     def chunk_read_count(self, memory_chunk: Shape) -> int:
         """

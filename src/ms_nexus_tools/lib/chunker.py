@@ -10,6 +10,7 @@ import numpy as np
 
 
 from .bounds import Chunk, Shape
+from icecream import ic
 
 
 def count_chunks_to_cover(data_shape: Shape, chunk_shape: Shape) -> list[int]:
@@ -279,7 +280,7 @@ class Chunker:
         data_shape,
         chunk_shape,
         max_item_count,
-        priorities: Shape | None = None,
+        priorities: list[Shape] | Shape | None = None,
     ) -> "Chunker":
         """
         Find the chunker that covers data_shape
@@ -312,8 +313,7 @@ class Chunker:
         (25, 20, 8)
         """
         chunked_data_shape = tuple(
-            int(math.floor(d // c))
-            for d, c in zip(data_shape, chunk_shape, strict=True)
+            int(math.ceil(d / c)) for d, c in zip(data_shape, chunk_shape, strict=True)
         )
         items_per_chunk = int(np.prod(chunk_shape))
         if max_item_count < items_per_chunk:
@@ -323,7 +323,10 @@ class Chunker:
         max_item_count = max_item_count // items_per_chunk
 
         if priorities is not None:
-            process_priorities = [priorities]
+            if isinstance(priorities, list):
+                process_priorities = priorities
+            else:
+                process_priorities = [priorities]
         else:
             last_first = list(range(len(data_shape), 0, -1))
             process_priorities = [

@@ -9,6 +9,7 @@ Float2D32 = np.ndarray[tuple[int, int], np.dtype[np.float32]]
 Int1D32 = np.ndarray[tuple[int], np.dtype[np.int32]]
 Int2D32 = np.ndarray[tuple[int, int], np.dtype[np.int32]]
 Int3D32 = np.ndarray[tuple[int, int, int], np.dtype[np.int32]]
+Int4D32 = np.ndarray[tuple[int, int, int, int], np.dtype[np.int32]]
 
 Intp1D = np.ndarray[tuple[int], np.dtype[np.intp]]
 

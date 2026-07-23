@@ -121,6 +121,7 @@ class NexusFile:
 
         if mode == "w" or mode == "w-" or mode == "x":
             self._file["entry"] = NXentry()
+            self._file.attrs["default"] = "entry"
             self.root = self._file["entry"]
             self.root["instrument"] = NXinstrument()
             self.root["experiment"] = NXparameters()
