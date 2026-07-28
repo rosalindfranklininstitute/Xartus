@@ -1,3 +1,4 @@
+from collections import defaultdict
 from pathlib import Path
 import json
 from typing import Any, Callable
@@ -25,7 +26,7 @@ class ManData:
 
         self.colors = data
 
-        self.men = []
+        self.men: list[dict] = []
         for ii in range(4):
             man_pos = []
             man_int = []
@@ -63,8 +64,12 @@ class ManSource(AbstractDataSource):
         man_data: ManData,
         supplimentary_axes: list[Axis] = [],
         mz_binning=1,
+        multipliers: dict[str, float] = {},
     ):
 
+        self.multipliers: defaultdict[str, float] = defaultdict(lambda: 1.0)
+        for k, v in multipliers.items():
+            self.multipliers[k] = v
         self.man_data = man_data
         self.axes: dict[str, Axis] = dict(
             x=Axis("x", 0, AxisDensity.CONTINUOUS, np.int16, "m"),
@@ -151,7 +156,10 @@ class ManSource(AbstractDataSource):
             raise UnknownAxisError(axis.name)
         if self.axes[axis.name].density != AxisDensity.CONTINUOUS:
             raise UnknownAxisError(axis.name, AxisDensity.CONTINUOUS)
-        return np.arange(self.man_data.shape[axis.primary_axis])
+        return (
+            np.arange(self.man_data.shape[axis.primary_axis])
+            * self.multipliers[axis.name]
+        )
 
     def binned_axis_edges(self, axis: Axis) -> np.ndarray:
         """
@@ -162,10 +170,13 @@ class ManSource(AbstractDataSource):
             raise UnknownAxisError(axis.name)
         if self.axes[axis.name].density != AxisDensity.BINNED:
             raise UnknownAxisError(axis.name, AxisDensity.BINNED)
-        return np.arange(
-            0,
-            self.man_data.shape[axis.primary_axis] + self.mz_binning,
-            self.mz_binning,
+        return (
+            np.arange(
+                0,
+                self.man_data.shape[axis.primary_axis] + self.mz_binning,
+                self.mz_binning,
+            )
+            * self.multipliers[axis.name]
         )
 
     def output_accumulations(self) -> dict[str, tuple[str, ...]]:
