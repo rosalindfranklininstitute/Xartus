@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 import sparse
+from h5py import h5s
 
 from icecream import ic
 
@@ -565,14 +566,14 @@ def write_data(
         ic(np.max(chunk_data.coords, axis=1))
         raise
 
-    coords_data = sparse.COO(
-        coords=final_data.coords,
-        data=np.arange(len(final_data.signal)),
-        shape=full_shape,
-        sorted=True,
-        has_duplicates=False,
-        prune=False,
-    )
+    # coords_data = sparse.COO(
+    #     coords=final_data.coords,
+    #     data=np.arange(len(final_data.signal)),
+    #     shape=full_shape,
+    #     sorted=True,
+    #     has_duplicates=False,
+    #     prune=False,
+    # )
 
     signal_data = sparse.COO(
         coords=final_data.coords,
@@ -592,87 +593,117 @@ def write_data(
         prune=False,
     )
 
-    axis = binned_axis[0]
+    # axis = binned_axis[0]
 
-    for data_entry, data_chunker, _ in data_chunks.items():
-        cbounds = ContainedBounds.from_chunk(data_chunker.data_shape, memory_chunk)
+    data_chunk_calues = [
+        (entry, chunker, dtype) for entry, chunker, dtype in data_chunks.items()
+    ]
 
-        chunk_edges = cbounds.chunk_edges(data_chunker.chunk_shape)
+    for data_entry, _, _ in tqdm(data_chunk_calues, desc="Processing data chunks"):
+        ds = nxs.root[data_entry].data.signal
 
-        coords = np.stack(
-            [
-                np.searchsorted(
-                    chunk_edges[ii],
-                    final_data.coords[ii, :],
-                    side="right",
-                )
-                for ii in range(final_data.coords.shape[0])
-            ],
-        )
+        f_space = ds.id.get_space()
+        f_space.select_elements(final_data.coords.T, h5s.SELECT_SET)
+        m_space = h5s.create_simple(final_data.signal.shape)
 
-        coords = _unique(coords - 1, data_chunker.chunk_count) + 1
+        if data_entry == _count_subentry_name():
+            ds.id.write(m_space, f_space, counts)
+        else:
+            ds.id.write(m_space, f_space, final_data.signal)
 
-        unique_chunk_count = coords.shape[1]
-        total_chunk_count = np.prod([len(edges) - 1 for edges in chunk_edges])
+        f_space.close()
+        m_space.close()
 
-        # This is true where two coords are NOT adjacent.
-        # Note: that this assumes the coords array is flattened and sorted, so that you cannot zig zag through the data.
-        is_not_adjacent = np.diff(coords[-1, :]) != 1
+        for axis, axis_data in zip(binned_axis, final_data.axis, strict=True):
+            ds = nxs.root[data_entry].data[f"{axis.name}_exact"]
 
-        adjacent = np.argwhere(is_not_adjacent).flatten()
-        adjacent = np.concatenate([[0], adjacent + 1, [coords.shape[1]]])
+            f_space = ds.id.get_space()
+            f_space.select_elements(final_data.coords.T, h5s.SELECT_SET)
+            m_space = h5s.create_simple(axis_data.shape)
+            ds.id.write(m_space, f_space, axis_data)
 
-        starts = coords[:, adjacent[:-1]]
-        ends = coords[:, adjacent[1:] - 1]
-        # Assert that each continuouse block is continuous in only one diemnsion.
-        # In principle we could have contigouse blocks across multiple blocks,
-        # but this requres them to be full, and the above method does not garantee that.
-        # TODO @dmd: Is this a valid assertion?
-        # assert np.all(np.sum((ends - starts != 0), axis=0) <= 1)
+            f_space.close()
+            m_space.close()
 
-        total_count = (
-            signal_data.nnz if data_entry == _count_subentry_name() else count_data.nnz
-        )
-        total_density = total_count / np.prod(memory_chunk.shape)
-
-        for ii in tqdm(
-            range(starts.shape[1]),
-            desc=f"Writing chunks for {data_entry} (Density: data: {total_density * 100:.2f}% chunk: {(unique_chunk_count / total_chunk_count) * 100:.1f}%)",
-            leave=False,
-        ):
-            chunk = Chunk(
-                [
-                    slice(chunk_edges[jj][sc - 1], chunk_edges[jj][ec], None)
-                    for jj, (sc, ec) in enumerate(
-                        zip(starts[:, ii], ends[:, ii], strict=True),
-                    )
-                ],
-            )
-
-            if data_entry == _count_subentry_name():
-                signal_chunk = count_data[*chunk]
-            else:
-                signal_chunk = signal_data[*chunk]
-
-            assert signal_chunk.nnz != 0
-
-            nxs.root[data_entry].data.signal[*chunk] = signal_chunk.todense()
-
-            coords_chunk = coords_data[*chunk]
-            assert coords_chunk.nnz != 0
-
-            coords = tuple([coords_chunk.coords[i, :] for i in range(len(chunk.shape))])
-            indices = coords_chunk.data
-
-            # TODO @DMD: Here all the binned axis share the same data type.
-            # https://github.com/orgs/rosalindfranklininstitute/projects/19/views/1?pane=issue&itemId=212408503
-            dense_axis_values = np.full(chunk.shape, np.nan)
-
-            for axis, axis_data in zip(binned_axis, final_data.axis, strict=True):
-                dense_axis_values[coords] = axis_data[indices]
-                nxs.root[data_entry].data[f"{axis.name}_exact"][*chunk] = (
-                    dense_axis_values
-                )
+    # for data_entry, data_chunker, _ in data_chunks.items():
+    #     cbounds = ContainedBounds.from_chunk(data_chunker.data_shape, memory_chunk)
+    #
+    #     chunk_edges = cbounds.chunk_edges(data_chunker.chunk_shape)
+    #
+    #     coords = np.stack(
+    #         [
+    #             np.searchsorted(
+    #                 chunk_edges[ii],
+    #                 final_data.coords[ii, :],
+    #                 side="right",
+    #             )
+    #             for ii in range(final_data.coords.shape[0])
+    #         ],
+    #     )
+    #
+    #     coords = _unique(coords - 1, data_chunker.chunk_count) + 1
+    #
+    #     unique_chunk_count = coords.shape[1]
+    #     total_chunk_count = np.prod([len(edges) - 1 for edges in chunk_edges])
+    #
+    #     # This is true where two coords are NOT adjacent.
+    #     # Note: that this assumes the coords array is flattened and sorted, so that you cannot zig zag through the data.
+    #     is_not_adjacent = np.diff(coords[-1, :]) != 1
+    #
+    #     adjacent = np.argwhere(is_not_adjacent).flatten()
+    #     adjacent = np.concatenate([[0], adjacent + 1, [coords.shape[1]]])
+    #
+    #     starts = coords[:, adjacent[:-1]]
+    #     ends = coords[:, adjacent[1:] - 1]
+    #     # Assert that each continuouse block is continuous in only one diemnsion.
+    #     # In principle we could have contigouse blocks across multiple blocks,
+    #     # but this requres them to be full, and the above method does not garantee that.
+    #     # TODO @dmd: Is this a valid assertion?
+    #     # assert np.all(np.sum((ends - starts != 0), axis=0) <= 1)
+    #
+    #     total_count = (
+    #         signal_data.nnz if data_entry == _count_subentry_name() else count_data.nnz
+    #     )
+    #     total_density = total_count / np.prod(memory_chunk.shape)
+    #
+    #     for ii in tqdm(
+    #         range(starts.shape[1]),
+    #         desc=f"Writing chunks for {data_entry} (Density: data: {total_density * 100:.2f}% chunk: {(unique_chunk_count / total_chunk_count) * 100:.1f}%)",
+    #         leave=False,
+    #     ):
+    #         chunk = Chunk(
+    #             [
+    #                 slice(chunk_edges[jj][sc - 1], chunk_edges[jj][ec], None)
+    #                 for jj, (sc, ec) in enumerate(
+    #                     zip(starts[:, ii], ends[:, ii], strict=True),
+    #                 )
+    #             ],
+    #         )
+    #
+    #         if data_entry == _count_subentry_name():
+    #             signal_chunk = count_data[*chunk]
+    #         else:
+    #             signal_chunk = signal_data[*chunk]
+    #
+    #         assert signal_chunk.nnz != 0
+    #
+    #         nxs.root[data_entry].data.signal[*chunk] = signal_chunk.todense()
+    #
+    #         coords_chunk = coords_data[*chunk]
+    #         assert coords_chunk.nnz != 0
+    #
+    #         coords = tuple([coords_chunk.coords[i, :] for i in range(len(chunk.shape))])
+    #         indices = coords_chunk.data
+    #
+    #         # TODO @DMD: Here all the binned axis share the same data type.
+    #         # https://github.com/orgs/rosalindfranklininstitute/projects/19/views/1?pane=issue&itemId=212408503
+    #         dense_axis_values = np.full(chunk.shape, np.nan)
+    #
+    #         for axis, axis_data in zip(binned_axis, final_data.axis, strict=True):
+    #             dense_axis_values[coords] = axis_data[indices]
+    #             nxs.root[data_entry].data[f"{axis.name}_exact"][*chunk] = (
+    #                 dense_axis_values
+    #             )
     return signal_data, count_data
 
 

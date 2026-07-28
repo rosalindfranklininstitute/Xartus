@@ -36,6 +36,7 @@ nx_density = "ms_nexus_tools:print_nx_data_stats"
 test = "ms_nexus_tools:test"
 query = "ms_nexus_tools:query"
 bulk_query = "ms_nexus_tools:bulk_query"
+nxslice = "ms_nexus_tools:nxslice"
 
 [build-system]
 requires = ["uv_build>=0.10.0,<0.11.0"]

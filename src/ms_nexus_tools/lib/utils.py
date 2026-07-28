@@ -290,3 +290,48 @@ class FileGuard(AbstractContextManager):
                 )
 
         return False
+
+
+def simplify_chunks(
+    chunks: tuple[tuple[int, ...], ...] | tuple[int, ...],
+) -> tuple[int, ...]:
+    """
+    Returns the simplified chunks representation (tuple[int,...]) from the given chunks.
+    Aserts that all the values for each dimension are the same, except the last.
+    >>> simplify_chunks((1,2,3))
+    (1, 2, 3)
+
+    >>> simplify_chunks(((1,), (2,), (3,)))
+    (1, 2, 3)
+
+    >>> simplify_chunks(((1,1), (2,2), (3,3)))
+    (1, 2, 3)
+
+    >>> simplify_chunks(((1,1), (2,1), (3,1)))
+    (1, 2, 3)
+
+    """
+    result = []
+    for c in chunks:
+        if isinstance(c, int):
+            result.append(c)
+        elif len(c) == 1:
+            result.append(c[0])
+        elif len(c) == 0:
+            raise ValueError("Chunk compoenent had size of 0.")
+        else:
+            main_value = c[0]
+            value_count = len(c)
+            for ii, m in enumerate(c):
+                if ii == value_count - 1:
+                    if m > main_value:
+                        raise ValueError(
+                            "The last chunk component is larger than the main value."
+                        )
+                elif m != main_value:
+                    raise ValueError(
+                        "Chunk components are not all the same size (except the last)."
+                    )
+            result.append(main_value)
+
+    return tuple(result)
