@@ -452,7 +452,7 @@ def test_multiaxis_off_default_slice(man_data_and_nexus, nx_dir):
         ],
         default_slice=["all"],
         slice=[
-            ["man3", "mz", "range", str(120), str(180)],
+            ["man3", "error", "range", str(120), str(180)],
         ],
     )
     nexus_slice.process(process_args, {})

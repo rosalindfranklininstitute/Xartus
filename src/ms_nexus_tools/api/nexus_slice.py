@@ -10,6 +10,7 @@ from typing import Any
 from dataclasses import dataclass, field
 from pathlib import Path
 import itertools
+import logging
 
 import h5py
 import hdf5plugin
@@ -31,6 +32,8 @@ from datargs import (
 from ..lib.nxs import NexusFile, NxAxis, NxAxes, create_field, FieldOptions
 from ..lib.chunker import count_chunks_to_cover
 from ..lib.bounds import Shape, Chunk
+
+logger = logging.getLogger(__name__)
 
 
 class MissingArgumentError(Exception):
@@ -230,7 +233,14 @@ class AxisParams:
                     error=f"Unknown slice type {self.slice_type}.",
                 )
         if len(self.index) == 0:
-            raise ValueError(f"The INdices were not specified for '{axis}'")
+            raise ValueError(f"The indices were not specified for '{axis}'")
+        if len(self.index) > 1:
+            raise InvalidArgumentError(
+                argument_name="axis",
+                group=group,
+                axis=axis,
+                error="Operations are not supported on n-dimensional axis",
+            )
 
 
 @dataclass
@@ -239,7 +249,7 @@ class GroupParams:
     paths: list[str] = field(default_factory=list)
     axes: dict[str, AxisParams] = field(default_factory=dict)
     shape: Shape = tuple()
-    default_axes: list[str] = field(default_factory=list)
+    slice_axes: list[str] = field(default_factory=list)
 
     def apply_default(self, default: "GroupParams", fle: h5py.File) -> None:
         if self.group_type is GroupType.Error:
@@ -297,24 +307,32 @@ class GroupParams:
                 for name in axis_names:
                     if f"{name}_indices" not in fle[path].attrs:
                         raise ValueError(
-                            f"Did not find axis {name} in {path} but was present in {first_path}"
+                            "axis",
+                            f"Did not find axis {name} in {path} but was present in {first_path}",
                         )
-
-        for name, index in zip(axis_names, axis_indices, strict=True):
-            if name not in self.axes:
-                self.axes[name] = copy.copy(default.axes["default"])
-            self.axes[name].index = index
 
         if first_shape is not None:
             self.shape = first_shape
-        if first_default_axes is not None:
-            self.default_axes = first_default_axes
 
-        for name in self.default_axes:
+        dim_has_axis: list[str | None] = [None for _ in self.shape]
+        for name, index in zip(axis_names, axis_indices, strict=True):
             if name not in self.axes:
-                raise NeXusError(
-                    f"Axis {name} specified as a default, but not present as an axis."
-                )
+                continue
+            self.axes[name].index = index
+            if len(index) == 1:
+                dim_has_axis[index[0]] = name
+
+        if first_default_axes is not None:
+            for index, (present, name) in enumerate(
+                zip(dim_has_axis, first_default_axes, strict=True)
+            ):
+                if present is None:
+                    assert name not in self.axes
+                    self.axes[name] = copy.copy(default.axes["default"])
+                    self.axes[name].index = [index]
+                    self.slice_axes.append(name)
+                else:
+                    self.slice_axes.append(present)
 
     def validate(self, group: str) -> None:
         if self.group_type is GroupType.Error:
@@ -324,13 +342,24 @@ class GroupParams:
         if len(self.paths) == 0:
             raise MissingArgumentError(argument_name="paths", group=group, axis=None)
 
+        dim_has_axis = [None for _ in self.shape]
         for name, axis in self.axes.items():
             axis.validate(group, name)
+            previous_axis_on_dim = dim_has_axis[axis.index[0]]
+            if previous_axis_on_dim is None:
+                dim_has_axis[axis.index[0]] = name
+            else:
+                raise InvalidArgumentError(
+                    argument_name="axis",
+                    group=group,
+                    axis=f"{name} and {previous_axis_on_dim}",
+                    error=f"Performing actions over multiple axis for the same dimension ({axis.index[0]}) is not supported.",
+                )
 
     def calculate_chunk(self, fle: h5py.File) -> Chunk:
         chunk = Chunk()
         for ii in range(len(self.shape)):
-            axis_name = self.default_axes[ii]
+            axis_name = self.slice_axes[ii]
             axis = self.axes[axis_name]
             slc: slice
             values = fle[self.paths[0]][axis_name][:]
@@ -360,6 +389,71 @@ class GroupParams:
             chunk.append(slc)
 
         return chunk
+
+    def assemble_final_axes(self, fle: h5py.File, chunk: Chunk) -> NxAxes:
+        path = self.paths[0]
+        dimension_actions = [self.axes[name].action_type for name in self.slice_axes]
+        ic(dimension_actions)
+
+        axes = NxAxes(
+            [[] for action in dimension_actions if action == ActionType.Leave]
+        )
+        for name in fle[path]:
+            if f"{name}_indices" in fle[path].attrs:
+                indices = fle[path].attrs[f"{name}_indices"]
+                use_axes = all(
+                    dimension_actions[ii] == ActionType.Leave for ii in indices
+                )
+                if not use_axes:
+                    logger.info(
+                        f"Did not put axis '{name}' into the output: One or more of its dimensions have been aggrigated."
+                    )
+                    continue
+
+                offset = 0
+                new_indices = []
+
+                for ii, action in enumerate(dimension_actions):
+                    if action != ActionType.Leave:
+                        offset += 1
+                    if ii in indices:
+                        new_indices.append(ii - offset)
+                indices = new_indices
+
+                dataset = fle[path][name]
+                values = dataset[*[chunk[ii] for ii in indices]]
+                primary_axis = indices[-1]
+
+                ic(name, indices, primary_axis)
+
+                unit = dataset.attrs.get("unit", None)
+                chunks = dataset.chunks
+
+                axes[primary_axis].append(
+                    NxAxis.create(
+                        values,
+                        name=name,
+                        indices=indices,
+                        unit=unit,
+                        chunk_shape=chunks,
+                    )
+                )
+
+        default_axes = [
+            ax
+            for ii, ax in enumerate(fle[path].attrs["axes"])
+            if dimension_actions[ii] == ActionType.Leave
+        ]
+
+        for ii, name in enumerate(default_axes):
+            dim_axes = axes[ii]
+            for jj, dim_axis in enumerate(dim_axes):
+                if dim_axis.name == name:
+                    if jj > 0:
+                        axes[ii].insert(0, axes[ii].pop(jj))
+                    break
+        assert axes.default_list() == default_axes
+        return axes
 
 
 def parse_slice(slice_arg: list[str]) -> tuple[SliceType, float, float]:
@@ -502,7 +596,7 @@ def process(args: ProcessArgs, config: dict[str, Any]) -> None:
 
                 actions = [
                     params.axes[axis_name].action_type
-                    for axis_name in params.default_axes
+                    for axis_name in params.slice_axes
                 ]
 
                 processes_data = None
@@ -524,21 +618,13 @@ def process(args: ProcessArgs, config: dict[str, Any]) -> None:
                 else:
                     processes_data = chunked_data
 
-                final_axes = NxAxes(
-                    [
-                        [NxAxis.create(fle[min_path][name][chunk[ii]], name, [ii])]
-                        for ii, (name, act) in enumerate(
-                            zip(params.default_axes, actions, strict=True)
-                        )
-                        if act == ActionType.Leave
-                    ]
-                )
+                final_axes = params.assemble_final_axes(fle, chunk)
 
                 loop_axes = [
                     ii for ii, act in enumerate(actions) if act == ActionType.Loop
                 ]
                 if len(loop_axes) > 0:
-                    names = [params.default_axes[ii] for ii in loop_axes]
+                    names = [params.slice_axes[ii] for ii in loop_axes]
                     values = [
                         fle[min_path][name][chunk[ii]]
                         for ii, name in zip(loop_axes, names, strict=True)
@@ -548,7 +634,7 @@ def process(args: ProcessArgs, config: dict[str, Any]) -> None:
                     ):
                         ii = 0
                         slc = []
-                        for jj in range(len(params.default_axes)):
+                        for jj in range(len(params.slice_axes)):
                             if jj in loop_axes:
                                 slc.append(parts[ii])
                                 ii += 1
