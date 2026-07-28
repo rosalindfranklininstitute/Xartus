@@ -514,6 +514,36 @@ def test_complete_sum(man_data_and_nexus, nx_dir):
         assert np.all(data == np.sum(man_data_and_nexus[0].dense))
 
 
+def test_binned_axis(man_data_and_nexus, nx_dir):
+    try:
+        man_data = man_source.ManData()
+        man_data_source = man_source.ManSource(
+            man_data,
+            supplimentary_axes=[
+                Axis("time", 0, AxisDensity.CONTINUOUS, np.int16, "s"),
+                Axis("mz", 2, AxisDensity.BINNED, np.int16, "mz"),
+                Axis("error", 2, AxisDensity.BINNED, np.int16, ""),
+            ],
+            multipliers=dict(x=0.1, y=0.1, mz=0.1, time=1.0, error=1.0),
+        )
+        filename = Path(__file__).parent / "man_binned.nxs"
+        if filename.exists():
+            filename.unlink()
+        process_args = data_convert.ProcessArgs(
+            in_path=Path(__file__).parent / "data" / "Man1.txt",
+            out_path=filename,
+            chunk_max_byte_count=1024 * 1024,
+            memory_max_byte_count=1024 * 1024 * 1024,
+            data_source=man_data_source,
+        )
+        data_convert.process(process_args, {})
+
+        raise NotImplementedError()
+
+    finally:
+        filename.unlink()
+
+
 @pytest.mark.skip(reason="I do not, yet, know how to test this.")
 def test_view_type(man_data_and_nexus, nx_dir):
     pass
