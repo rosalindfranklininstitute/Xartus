@@ -539,6 +539,10 @@ def process(args: ProcessArgs, config: dict[str, Any]) -> None:
                 ]
                 if len(loop_axes) > 0:
                     names = [params.default_axes[ii] for ii in loop_axes]
+                    values = [
+                        fle[min_path][name][chunk[ii]]
+                        for ii, name in zip(loop_axes, names, strict=True)
+                    ]
                     for parts in itertools.product(
                         *[range(chunk.shape[ii]) for ii in loop_axes]
                     ):
@@ -554,9 +558,11 @@ def process(args: ProcessArgs, config: dict[str, Any]) -> None:
 
                         loop_data = processes_data[*slc]
 
+                        loop_values = [values[ii][p] for ii, p in enumerate(parts)]
+
                         name = "-".join(
-                            f"{name}_{value}"
-                            for name, value in zip(names, parts, strict=True)
+                            f"{name}_{value:.3g}"
+                            for name, value in zip(names, loop_values, strict=True)
                         )
                         nxs.root[name] = NXsubentry(
                             NXdata(
@@ -575,13 +581,23 @@ def process(args: ProcessArgs, config: dict[str, Any]) -> None:
                         nxs.root[name].attrs["default"] = "data"
                         final_axes.add_to_group(nxs.root[f"{name}/data/"])
                 else:
+                    if processes_data.shape == ():
+                        shape = (1,)
+                        chunks = (1,)
+                    else:
+                        shape = processes_data.shape
+                        chunks = simplify_chunks(processes_data.chunks)
+                    chunks = tuple(
+                        min(s, c) for s, c in zip(shape, chunks, strict=True)
+                    )
+
                     nxs.root["data"] = NXdata(
                         signal=create_field(
                             dtype=processes_data.dtype,
-                            shape=processes_data.shape,
+                            shape=shape,
                             compression=args.field_options.compression,
                             compression_opts=args.field_options.compression_opts,
-                            chunks=simplify_chunks(processes_data.chunks),
+                            chunks=chunks,
                             shuffle=args.field_options.shuffle,
                             fillvalue=0,
                         ),

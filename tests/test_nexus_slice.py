@@ -29,7 +29,9 @@ from icecream import ic
 @pytest.fixture(scope="module")
 def man_data_and_nexus():
     man_data = man_source.ManData()
-    man_data_source = man_source.ManSource(man_data)
+    man_data_source = man_source.ManSource(
+        man_data, multipliers=dict(x=0.1, y=0.1, mz=0.1)
+    )
     filename = Path(__file__).parent / "man.nxs"
     if filename.exists():
         filename.unlink()
@@ -42,7 +44,7 @@ def man_data_and_nexus():
     )
     data_convert.process(process_args, {})
     yield man_data, filename
-    # filename.unlink()
+    filename.unlink()
 
 
 @pytest.fixture
@@ -52,7 +54,7 @@ def nx_dir():
         rmtree(filename)
     filename.mkdir()
     yield filename
-    # rmtree(filename)
+    rmtree(filename)
 
 
 def test_fully_specified(man_data_and_nexus, nx_dir):
@@ -79,7 +81,7 @@ def test_fully_specified(man_data_and_nexus, nx_dir):
         slice=[
             ["man3", "x", "all"],
             ["man3", "y", "all"],
-            ["man3", "mz", "range", str(120), str(180)],
+            ["man3", "mz", "range", str(12), str(18)],
             ["spectra", "x", "all"],
             ["spectra", "y", "all"],
             ["spectra", "mz", "all"],
@@ -125,7 +127,7 @@ def test_using_defaults(man_data_and_nexus, nx_dir):
         ],
         default_slice=["all"],
         slice=[
-            ["man3", "mz", "range", str(120), str(180)],
+            ["man3", "mz", "range", str(12), str(18)],
         ],
     )
     nexus_slice.process(process_args, {})
@@ -168,7 +170,7 @@ def test_error_on_missing(man_data_and_nexus, nx_dir):
         ],
         default_slice=["all"],
         slice=[
-            ["man3", "mz", "range", str(120), str(180)],
+            ["man3", "mz", "range", str(12), str(18)],
         ],
     )
 
@@ -206,9 +208,9 @@ def test_leave_and_slice(man_data_and_nexus, nx_dir):
         ],
         default_slice=["all"],
         slice=[
-            ["man3_range", "mz", "range", str(120), str(180)],
-            ["man3_centre", "mz", "centred", str(150), str(60)],
-            ["man3_value", "mz", "value", str(150)],
+            ["man3_range", "mz", "range", str(12), str(18)],
+            ["man3_centre", "mz", "centred", str(15), str(6)],
+            ["man3_value", "mz", "value", str(15)],
         ],
     )
     nexus_slice.process(process_args, {})
@@ -259,7 +261,7 @@ def test_leave_and_slice(man_data_and_nexus, nx_dir):
         assert data.shape == (8, 8, 1)
         value_axis = fle["/entry/data/mz"][:]
         assert value_axis.shape == (1,)
-        assert value_axis[0] == 150
+        assert value_axis[0] == 15
 
         assert np.all(data[:, :, 0] == man_data_and_nexus[0].dense[:, :, 150])
 
@@ -278,9 +280,9 @@ def test_loop_and_slice(man_data_and_nexus, nx_dir):
         ],
         default_slice=["all"],
         slice=[
-            ["rows", "y", "range", str(2), str(6)],
-            ["rows", "mz", "centred", str(150), str(60)],
-            ["pixels", "x", "value", str(2)],
+            ["rows", "y", "range", str(0.2), str(0.6)],
+            ["rows", "mz", "centred", str(15), str(6)],
+            ["pixels", "x", "value", str(0.2)],
         ],
     )
 
@@ -289,12 +291,12 @@ def test_loop_and_slice(man_data_and_nexus, nx_dir):
     assert out_file.exists()
     with h5py.File(out_file, "r") as fle:
         for yy in range(8):
-            name = f"/entry/x_{yy}/data"
+            name = f"/entry/x_{yy * 0.1:.3g}/data"
             assert f"{name}/signal" in fle
             assert f"{name}/x" not in fle
             assert f"{name}/y" in fle
             assert f"{name}/mz" in fle
-        data = fle[f"{name}/signal"][:, :, :]
+        data = fle[f"{name}/signal"][:, :]
         assert data.shape == (4, 60)
         assert np.all(data == man_data_and_nexus[0].dense[yy, 2:6, 120:180])
 
@@ -303,12 +305,12 @@ def test_loop_and_slice(man_data_and_nexus, nx_dir):
     assert out_file.exists()
     with h5py.File(out_file, "r") as fle:
         for yy in range(8):
-            name = f"/entry/x_2-y_{yy}/data"
+            name = f"/entry/x_0.2-y_{yy * 0.1:.3g}/data"
             assert f"{name}/signal" in fle
             assert f"{name}/x" not in fle
             assert f"{name}/y" not in fle
             assert f"{name}/mz" in fle
-        data = fle[f"{name}/signal"][:, :, :]
+        data = fle[f"{name}/signal"][:]
         assert data.shape == (240,)
         assert np.all(data == man_data_and_nexus[0].dense[2, yy, :])
 
@@ -330,10 +332,10 @@ def test_sum_and_slice(man_data_and_nexus, nx_dir):
         ],
         default_slice=["all"],
         slice=[
-            ["man3_range", "mz", "range", str(120), str(180)],
-            ["man3_centre", "mz", "centred", str(150), str(60)],
-            ["man3_value", "mz", "value", str(150)],
-            ["man3_cross_value", "mz", "value", str(150)],
+            ["man3_range", "mz", "range", str(12), str(18)],
+            ["man3_centre", "mz", "centred", str(15), str(6)],
+            ["man3_value", "mz", "value", str(15)],
+            ["man3_cross_value", "mz", "value", str(15)],
         ],
     )
     nexus_slice.process(process_args, {})
@@ -344,7 +346,7 @@ def test_sum_and_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/x" in fle
         assert "/entry/data/y" in fle
         assert "/entry/data/mz" not in fle
-        data = fle["/entry/data/signal"][:, :, :]
+        data = fle["/entry/data/signal"][:, :]
         assert data.shape == (8, 8)
         assert np.all(data == np.sum(man_data_and_nexus[0].dense, axis=2))
 
@@ -356,7 +358,7 @@ def test_sum_and_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/x" in fle
         assert "/entry/data/y" in fle
         assert "/entry/data/mz" not in fle
-        data = fle["/entry/data/signal"][:, :, :]
+        data = fle["/entry/data/signal"][:, :]
         assert data.shape == (8, 8)
         assert np.all(
             data == np.sum(man_data_and_nexus[0].dense[:, :, 120:180], axis=2)
@@ -370,7 +372,7 @@ def test_sum_and_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/x" in fle
         assert "/entry/data/y" in fle
         assert "/entry/data/mz" not in fle
-        data = fle["/entry/data/signal"][:, :, :]
+        data = fle["/entry/data/signal"][:, :]
         assert data.shape == (8, 8)
         assert np.all(
             data == np.sum(man_data_and_nexus[0].dense[:, :, 120:180], axis=2)
@@ -384,9 +386,9 @@ def test_sum_and_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/x" in fle
         assert "/entry/data/y" in fle
         assert "/entry/data/mz" not in fle
-        data = fle["/entry/data/signal"][:, :, :]
+        data = fle["/entry/data/signal"][:, :]
         assert data.shape == (8, 8)
-        assert np.all(data == man_data_and_nexus[0].dense[:, :, 150])
+        assert np.all(data[:, :] == man_data_and_nexus[0].dense[:, :, 150])
 
     nexus_slice.process(process_args, {})
     out_file = nx_dir / "man3_cross_value.nxs"
@@ -396,7 +398,7 @@ def test_sum_and_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/x" not in fle
         assert "/entry/data/y" not in fle
         assert "/entry/data/mz" in fle
-        data = fle["/entry/data/signal"][:, :, :]
+        data = fle["/entry/data/signal"][:]
         assert data.shape == (1,)
         assert np.all(
             data == np.sum(man_data_and_nexus[0].dense[:, :, 150], axis=(0, 1))
