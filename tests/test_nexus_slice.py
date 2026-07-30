@@ -515,18 +515,17 @@ def test_complete_sum(man_data_and_nexus, nx_dir):
 
 
 def test_binned_axis(man_data_and_nexus, nx_dir):
+    filename = Path(__file__).parent / "man_binned.nxs"
     try:
         man_data = man_source.ManData()
         man_data_source = man_source.ManSource(
             man_data,
             supplimentary_axes=[
-                Axis("time", 0, AxisDensity.CONTINUOUS, np.int16, "s"),
                 Axis("mz", 2, AxisDensity.BINNED, np.int16, "mz"),
                 Axis("error", 2, AxisDensity.BINNED, np.int16, ""),
             ],
-            multipliers=dict(x=0.1, y=0.1, mz=0.1, time=1.0, error=1.0),
+            multipliers=dict(x=0.1, y=0.1, mz=0.1, error=1.0),
         )
-        filename = Path(__file__).parent / "man_binned.nxs"
         if filename.exists():
             filename.unlink()
         process_args = data_convert.ProcessArgs(
@@ -538,7 +537,51 @@ def test_binned_axis(man_data_and_nexus, nx_dir):
         )
         data_convert.process(process_args, {})
 
-        raise NotImplementedError()
+        nexus_args = nexus_slice.ProcessArgs(
+            in_path=man_data_and_nexus[1],
+            out_dir=nx_dir,
+            default_group_type=GroupType.View,
+            default_paths=["/entry/images/data/", "/entry/spectra/data/"],
+            default_action=ActionType.Leave,
+            action=[
+                ["all", "y", "sum"],
+                ["all", "mz", "sum"],
+            ],
+            default_slice=["all"],
+            slice=[
+                ["all", "x", "range", str(0.1), str(0.7)],
+                ["sliced", "x", "range", str(0.1), str(0.7)],
+                ["sliced", "y", "range", str(0.1), str(0.7)],
+                ["sliced", "mz", "range", str(12), str(18)],
+            ],
+        )
+        nexus_slice.process(nexus_args, {})
+        out_file = nx_dir / "all.nxs"
+        assert out_file.exists()
+        with h5py.File(out_file, "r") as fle:
+            assert "/entry/data/signal" in fle
+            assert "/entry/data/x" in fle
+            assert "/entry/data/y" not in fle
+            assert "/entry/data/mz" not in fle
+            assert "/entry/data/error" not in fle
+            data = fle["/entry/data/signal"][...]
+            assert data.shape == (6,)
+            assert np.all(data == np.sum(man_data_and_nexus[0].dense[1:7], axis=(1, 2)))
+
+        out_file = nx_dir / "sliced.nxs"
+        assert out_file.exists()
+        with h5py.File(out_file, "r") as fle:
+            assert "/entry/data/signal" in fle
+            assert "/entry/data/x" in fle
+            assert "/entry/data/y" in fle
+            assert "/entry/data/mz" in fle
+            assert "/entry/data/error" in fle
+            data = fle["/entry/data/signal"][...]
+            assert data.shape == (6, 6, 60)
+            assert fle["/entry/data/x"].shape == (6,)
+            assert fle["/entry/data/y"].shape == (6,)
+            assert fle["/entry/data/mz"].shape == (60,)
+            assert np.all(data == man_data_and_nexus[0].dense[1:7, 1:7, 120:180])
 
     finally:
         filename.unlink()
