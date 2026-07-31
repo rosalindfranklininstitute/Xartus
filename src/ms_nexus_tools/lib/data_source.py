@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: Apache-2.0
+import sparse
 
 from contextlib import AbstractContextManager
 from typing import Any, Callable, NamedTuple
@@ -16,29 +17,29 @@ from .bounds import Chunk, Shape
 from .multi_coo import MultiCOO
 
 
-class AxisDensity(Enum):
-    CONTINUOUS = 1
+class AxisType(Enum):
+    EXACT = 1
     BINNED = 2
 
 
 @dataclass
 class Axis:
     name: str
-    primary_axis: int  # NOTE: Assumption: an axis only defines 1 dimension. Nexus is more poweful than this.
-    density: AxisDensity
+    primary_axis: int
+    axis_type: AxisType
     dtype: npt.DTypeLike
     units: str | None = None
 
 
 class UnknownAxisError(Exception):
-    def __init__(self, name: str, density: AxisDensity | None = None):
+    def __init__(self, name: str, density: AxisType | None = None):
         match density:
             case None:
                 super().__init__(f"Unknown axis: {name}")
-            case AxisDensity.CONTINUOUS:
-                super().__init__(f"Unknown continuous axis: {name}")
-            case AxisDensity.BINNED:
-                super().__init__(f"Unknown sparse axis: {name}")
+            case AxisType.EXACT:
+                super().__init__(f"Unknown exact axis: {name}")
+            case AxisType.BINNED:
+                super().__init__(f"Unknown binned axis: {name}")
 
 
 class InvalidAxisError(Exception):
@@ -47,7 +48,8 @@ class InvalidAxisError(Exception):
 
 class DataShape(NamedTuple):
     shape: Shape
-    density: float
+    is_sparse: bool
+    worst_case_density: float
 
 
 class AbstractDataSource(AbstractContextManager):
@@ -106,16 +108,16 @@ class AbstractDataSource(AbstractContextManager):
         """
         Returns the axis that should be used when storing the data.
         For examlpe simple image data (x,y, spectra):
-        axis(0) : Axis('x', 0, [], CONTINUOUS, 'um')
-        axis(1) : Axis('y', 1, [], CONTINUOUS, 'um')
+        axis(0) : Axis('x', 0, [], EXACT, 'um')
+        axis(1) : Axis('y', 1, [], EXACT, 'um')
         If is it continuous:
-        axis(2) : Axis('mz', 2, [], CONTINUOUS, 'mz')
+        axis(2) : Axis('mz', 2, [], EXACT, 'mz')
         if it is only peaks:
-        axis(2) : Axis('mz', 2, [0,1], SPARSE, 'mz')
+        axis(2) : Axis('mz', 2, [0,1], BINNED, 'mz')
         """
 
     @abstractmethod
-    def continuous_axis_values(self, axis: Axis) -> np.ndarray:
+    def exact_axis_values(self, axis: Axis) -> np.ndarray:
         """
         Returns the values for the specified continuous axis.
         """
@@ -142,13 +144,11 @@ class AbstractDataSource(AbstractContextManager):
     def fill_chunk(
         self,
         memory_chunk: Chunk,
-        fill_axis: list[Axis],
         update: Callable[[int], None],
     ) -> np.ndarray | MultiCOO:
         """
         Read data from the source in the region specified by
-        memory_chunk and return that data. Also return the data
-        any sparse axis.
+        memory_chunk and return that data.
 
         Parameters:
         memory_chunk:   The bounds of the data to read.
@@ -157,10 +157,7 @@ class AbstractDataSource(AbstractContextManager):
                         The total of the progress counter is
                         sum([chunk_read_count(mc) for mc in all_memory_chunks])
         Returns:
-        The data from the source, and the data for all the sparse axes, ordered in the same order as in the fill_axis.
-        If dense :
+        The data from the source.
         -> return_data.shape == self.shape()
-        If sparse there is an extra dimension for storing signal and each sparse axis:
-        -> return_data.shape[0:-1] == self.shape() and return_data.shape[-1] = len(fill_axis)+1
 
         """

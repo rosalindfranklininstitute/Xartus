@@ -1,3 +1,5 @@
+import sparse
+import math
 from collections import defaultdict
 from pathlib import Path
 import json
@@ -11,7 +13,7 @@ from ms_nexus_tools.lib.data_source import (
     Axis,
     MultiCOO,
     DataShape,
-    AxisDensity,
+    AxisType,
     UnknownAxisError,
 )
 
@@ -63,18 +65,21 @@ class ManSource(AbstractDataSource):
         self,
         man_data: ManData,
         supplimentary_axes: list[Axis] = [],
-        mz_binning=1,
         multipliers: dict[str, float] = {},
+        binning: dict[str, float] = {},
     ):
 
         self.multipliers: defaultdict[str, float] = defaultdict(lambda: 1.0)
         for k, v in multipliers.items():
             self.multipliers[k] = v
+        self.binning: defaultdict[str, float] = defaultdict(lambda: 1.0)
+        for k, v in binning.items():
+            self.binning[k] = v
         self.man_data = man_data
         self.axes: dict[str, Axis] = dict(
-            x=Axis("x", 0, AxisDensity.CONTINUOUS, np.int16, "m"),
-            y=Axis("y", 1, AxisDensity.CONTINUOUS, np.int16, "m"),
-            mz=Axis("mz", 2, AxisDensity.CONTINUOUS, np.int16, "mz"),
+            x=Axis("x", 0, AxisType.EXACT, np.int16, "m"),
+            y=Axis("y", 1, AxisType.EXACT, np.int16, "m"),
+            mz=Axis("mz", 2, AxisType.EXACT, np.int16, "mz"),
         )
         for axis in supplimentary_axes:
             self.axes[axis.name] = axis
@@ -86,10 +91,21 @@ class ManSource(AbstractDataSource):
             assert key == axis.name
             axis_primary.append(axis.primary_axis)
             self.axis_order.append(axis.name)
-            self.any_sparse |= axis.density == AxisDensity.BINNED
+            self.any_sparse |= axis.axis_type == AxisType.BINNED
         order = np.argsort(axis_primary)
         self.axis_order = [self.axis_order[oo] for oo in order]
-        self.mz_binning = mz_binning
+
+        self.axis_values = [np.array([])] * 3
+        shape = [0, 0, 0]
+        for ax in self.axes.values():
+            if shape[ax.primary_axis] == 0:
+                if ax.axis_type == AxisType.BINNED:
+                    self.axis_values[ax.primary_axis] = self.binned_axis_edges(ax)
+                    shape[ax.primary_axis] = len(self.axis_values[ax.primary_axis]) - 1
+                else:
+                    self.axis_values[ax.primary_axis] = self.exact_axis_values(ax)
+                    shape[ax.primary_axis] = len(self.axis_values[ax.primary_axis])
+        self.total_shape = Shape(shape)
 
     def __enter__(self):
         pass
@@ -107,17 +123,11 @@ class ManSource(AbstractDataSource):
 
     def shape(self) -> DataShape:
         """Return the shape of the data."""
-        if self.any_sparse:
-            shape = [0, 0, 0]
-            for ax in self.axes.values():
-                if shape[ax.primary_axis] == 0:
-                    ss = self.man_data.shape[ax.primary_axis]
-                    if ax.density == AxisDensity.BINNED:
-                        shape[ax.primary_axis] = ss // self.mz_binning
-                    else:
-                        shape[ax.primary_axis] = ss
-            return DataShape(Shape(shape), self.man_data.density)
-        return DataShape(self.man_data.shape, 1.0)
+        return DataShape(
+            self.total_shape,
+            is_sparse=self.any_sparse,
+            worst_case_density=self.man_data.density,
+        )
 
     def signal_type(self) -> npt.DTypeLike:
         """Returns the type for data."""
@@ -150,12 +160,12 @@ class ManSource(AbstractDataSource):
         """
         return [self.axes[ax_name] for ax_name in self.axis_order]
 
-    def continuous_axis_values(self, axis: Axis) -> np.ndarray:
-        """Returns the values for the specified continuous axis."""
+    def exact_axis_values(self, axis: Axis) -> np.ndarray:
+        """Returns the values for the specified exact axis."""
         if axis.name not in self.axes:
             raise UnknownAxisError(axis.name)
-        if self.axes[axis.name].density != AxisDensity.CONTINUOUS:
-            raise UnknownAxisError(axis.name, AxisDensity.CONTINUOUS)
+        if self.axes[axis.name].axis_type != AxisType.EXACT:
+            raise UnknownAxisError(axis.name, AxisType.EXACT)
         return (
             np.arange(self.man_data.shape[axis.primary_axis])
             * self.multipliers[axis.name]
@@ -168,13 +178,13 @@ class ManSource(AbstractDataSource):
         """
         if axis.name not in self.axes:
             raise UnknownAxisError(axis.name)
-        if self.axes[axis.name].density != AxisDensity.BINNED:
-            raise UnknownAxisError(axis.name, AxisDensity.BINNED)
+        if self.axes[axis.name].axis_type != AxisType.BINNED:
+            raise UnknownAxisError(axis.name, AxisType.BINNED)
         return (
             np.arange(
                 0,
-                self.man_data.shape[axis.primary_axis] + self.mz_binning,
-                self.mz_binning,
+                self.man_data.shape[axis.primary_axis] + self.binning[axis.name],
+                self.binning[axis.name],
             )
             * self.multipliers[axis.name]
         )
@@ -193,7 +203,6 @@ class ManSource(AbstractDataSource):
     def fill_chunk(
         self,
         memory_chunk: Chunk,
-        fill_axis: list[Axis],
         update: Callable[[int], None],
     ) -> np.ndarray | MultiCOO:
         """
@@ -219,18 +228,8 @@ class ManSource(AbstractDataSource):
             mask = np.full((self.man_data.total_int.shape[0],), True)
 
             pos = self.man_data.total_pos[:, :]
-            edges = self.binned_axis_edges(fill_axis[0]) + 0.1
-            labels = np.searchsorted(edges, pos[2, :])
-            highest_mz = len(edges) - 1
-            labels[labels == highest_mz] = highest_mz
-            pos[2, :] = labels
             for ii in range(3):
-                mask &= (pos[ii, :] >= memory_chunk[ii].start) & (
-                    pos[ii, :] < memory_chunk[ii].stop
-                )
-            return MultiCOO(
-                pos[:, mask],
-                self.man_data.total_int[mask],
-                [self.man_data.total_pos[2, mask] for _ in fill_axis],
-            )
+                axis_values = self.axis_values[ii][memory_chunk[ii]]
+                mask &= (pos[ii, :] >= axis_values[0]) & (pos[ii, :] <= axis_values[-1])
+            return MultiCOO(pos[:, mask], self.man_data.total_int[mask], [])
         return self.man_data.dense[*memory_chunk]

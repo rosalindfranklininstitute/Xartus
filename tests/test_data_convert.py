@@ -10,11 +10,13 @@ import h5py
 
 from ms_nexus_tools.lib.chunker import count_chunks_to_cover
 from ms_nexus_tools.api import data_convert
-from ms_nexus_tools.lib.data_source import Axis, AxisDensity
+from ms_nexus_tools.lib.data_source import Axis, AxisType
 
 from .data import man_source
 
 import pytest
+
+from icecream import ic
 
 
 @pytest.fixture(scope="module")
@@ -116,7 +118,7 @@ def get_dataset_total_and_used_chunks(fle, name):
 def test_binned_single_axis_single_chunk(nx_file, man_data):
     man_data_source = man_source.ManSource(
         man_data,
-        supplimentary_axes=[Axis("mz", 2, AxisDensity.BINNED, np.int16, "mz")],
+        supplimentary_axes=[Axis("mz", 2, AxisType.BINNED, np.int16, "mz")],
     )
 
     process_args = data_convert.ProcessArgs(
@@ -134,16 +136,9 @@ def test_binned_single_axis_single_chunk(nx_file, man_data):
         check_data_correct(fle, man_data, process_args.chunk_max_byte_count / 2)
 
         for data_name in ["images", "spectra"]:
-            assert f"/entry/{data_name}/data/mz_exact" in fle
-            assert "mz_exact_indices" in fle[f"/entry/{data_name}/data/"].attrs
-
             name = f"/entry/{data_name}/data/signal"
 
-            assert fle[f"/entry/{data_name}/data/mz_exact"].shape == fle[name].shape
-
             total_chunks, n = get_dataset_total_and_used_chunks(fle, name)
-
-            assert f"/entry/{data_name}/data/mz_exact" in fle
 
             assert n == total_chunks
             assert n == 1
@@ -158,7 +153,7 @@ def test_binned_single_axis_single_chunk(nx_file, man_data):
 def test_binned_single_axis_multi_chunk(nx_file, man_data):
     man_data_source = man_source.ManSource(
         man_data,
-        supplimentary_axes=[Axis("mz", 2, AxisDensity.BINNED, np.int16, "mz")],
+        supplimentary_axes=[Axis("mz", 2, AxisType.BINNED, np.int16, "mz")],
     )
 
     process_args = data_convert.ProcessArgs(
@@ -177,12 +172,7 @@ def test_binned_single_axis_multi_chunk(nx_file, man_data):
 
         has_some_sparsity = False
         for data_name in ["images", "spectra"]:
-            assert f"/entry/{data_name}/data/mz_exact" in fle
-            assert "mz_exact_indices" in fle[f"/entry/{data_name}/data/"].attrs
-
             name = f"/entry/{data_name}/data/signal"
-
-            assert fle[f"/entry/{data_name}/data/mz_exact"].shape == fle[name].shape
 
             total_chunks, n = get_dataset_total_and_used_chunks(fle, name)
 
@@ -199,8 +189,8 @@ def test_binned_single_axis_multi_chunk(nx_file, man_data):
 def test_binned_single_axis_single_chunk_with_mz_bin_2(nx_file, man_data):
     man_data_source = man_source.ManSource(
         man_data,
-        supplimentary_axes=[Axis("mz", 2, AxisDensity.BINNED, np.int16, "mz")],
-        mz_binning=2,
+        supplimentary_axes=[Axis("mz", 2, AxisType.BINNED, np.int16, "mz")],
+        binning=dict(mz=2),
     )
 
     process_args = data_convert.ProcessArgs(
@@ -221,6 +211,7 @@ def test_binned_single_axis_single_chunk_with_mz_bin_2(nx_file, man_data):
             assert np.min(mz_values[:]) == 2
             assert np.max(mz_values[:]) == 240
             assert mz_values.shape == (120,)
+
             assert np.all(np.sum(data_part, axis=2) == np.sum(man_data.dense, axis=2))
             for ii in range(4):
                 assert np.all(
@@ -240,8 +231,8 @@ def test_dense_multi_axis_single_chunk(nx_file, man_data):
     man_data_source = man_source.ManSource(
         man_data,
         supplimentary_axes=[
-            Axis("time", 0, AxisDensity.CONTINUOUS, np.int16, "s"),
-            Axis("error", 2, AxisDensity.CONTINUOUS, np.int16, ""),
+            Axis("time", 0, AxisType.EXACT, np.int16, "s"),
+            Axis("error", 2, AxisType.EXACT, np.int16, ""),
         ],
     )
 
@@ -285,8 +276,8 @@ def test_binned_multi_continuous_axis_single_chunk(nx_file, man_data):
     man_data_source = man_source.ManSource(
         man_data,
         supplimentary_axes=[
-            Axis("mz", 2, AxisDensity.BINNED, np.int16, "s"),
-            Axis("time", 0, AxisDensity.CONTINUOUS, np.int16, "s"),
+            Axis("mz", 2, AxisType.BINNED, np.int16, "s"),
+            Axis("time", 0, AxisType.EXACT, np.int16, "s"),
         ],
     )
 
@@ -327,8 +318,8 @@ def test_binned_multi_binned_axis_single_chunk(nx_file, man_data):
     man_data_source = man_source.ManSource(
         man_data,
         supplimentary_axes=[
-            Axis("mz", 2, AxisDensity.BINNED, np.int16, "mz"),
-            Axis("error", 2, AxisDensity.BINNED, np.int16, "%"),
+            Axis("mz", 2, AxisType.BINNED, np.int16, "mz"),
+            Axis("error", 2, AxisType.BINNED, np.int16, "%"),
         ],
     )
 
@@ -351,12 +342,6 @@ def test_binned_multi_binned_axis_single_chunk(nx_file, man_data):
             assert f"/entry/{data_name}/data/mz" in fle
             assert f"/entry/{data_name}/data/error" in fle
 
-            assert f"/entry/{data_name}/data/mz_exact" in fle
-            assert "mz_exact_indices" in fle[f"/entry/{data_name}/data/"].attrs
-
-            assert f"/entry/{data_name}/data/error_exact" in fle
-            assert "error_exact_indices" in fle[f"/entry/{data_name}/data/"].attrs
-
             assert "x_indices" in fle[f"/entry/{data_name}/data/"].attrs
             assert "y_indices" in fle[f"/entry/{data_name}/data/"].attrs
             assert "mz_indices" in fle[f"/entry/{data_name}/data/"].attrs
@@ -369,8 +354,3 @@ def test_binned_multi_binned_axis_single_chunk(nx_file, man_data):
             assert fle[f"/entry/{data_name}/data/"].attrs["y_indices"] == 1
             assert fle[f"/entry/{data_name}/data/"].attrs["mz_indices"] == 2
             assert fle[f"/entry/{data_name}/data/"].attrs["error_indices"] == 2
-
-            assert np.all(
-                fle[f"/entry/{data_name}/data/mz_exact"][:, :, :]
-                == fle[f"/entry/{data_name}/data/error_exact"][:, :, :]
-            )

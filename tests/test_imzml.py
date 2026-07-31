@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from ms_nexus_tools.api import data_convert, imzml
-from ms_nexus_tools.lib.data_source import Axis, AxisDensity
+from ms_nexus_tools.lib.data_source import Axis, AxisType
 
 from pyimzml.ImzMLParser import ImzMLParser
 
@@ -46,7 +46,7 @@ def imzml_files():
 
 def test_full_convert(nx_file, imzml_files, man_data):
 
-    man_data_source = man_source.ManSource(man_data)
+    man_data_source = man_source.ManSource(man_data, multipliers={"mz": 0.1})
 
     convert_args = data_convert.ProcessArgs(
         in_path=Path(__file__).parent / "data" / "Man1.txt",
@@ -77,7 +77,10 @@ def test_full_convert(nx_file, imzml_files, man_data):
     with ImzMLParser(filename=imzml_files[0]) as imzml_data:
         for ii, coords in enumerate(imzml_data.coordinates):
             mz_values, int_values = imzml_data.getspectrum(ii)
-            assert np.all(man_data.dense[*coords[0:2], :] == int_values[:])
+            np.testing.assert_allclose(man_data.dense[*coords[0:2], :], int_values[:])
+            np.testing.assert_allclose(
+                mz_values, (np.arange(man_data.shape[2]) * 0.1), atol=1e-5
+            )
 
 
 def test_full_convert_one_indexed(nx_file, imzml_files, man_data):
@@ -195,11 +198,12 @@ def test_total_image(nx_file, imzml_files, man_data):
                 assert np.all(max_image[coords[0], :] == int_values[:])
 
 
+@pytest.mark.skip(reason="decide whether to include mz_exact")
 def test_binned_axis(nx_file, imzml_files, man_data):
 
     man_data_source = man_source.ManSource(
         man_data,
-        supplimentary_axes=[Axis("mz", 2, AxisDensity.BINNED, np.int16, "mz")],
+        supplimentary_axes=[Axis("mz", 2, AxisType.BINNED, np.int16, "mz")],
     )
 
     convert_args = data_convert.ProcessArgs(

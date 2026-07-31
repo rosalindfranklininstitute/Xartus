@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: Apache-2.0
-
+from dataclasses import dataclass
 from typing import NamedTuple, Sequence
 
 import numpy as np
@@ -10,12 +10,13 @@ from .dtypes import Any1D, Intp1D
 from .bounds import Shape
 
 
-class MultiCOO(NamedTuple):
+@dataclass
+class MultiCOO:
     coords: np.ndarray[tuple[int, ...], np.dtype[np.int32]]
     signal: Any1D
     axis: list[Any1D]
 
-    def sort(self, shape) -> "MultiCOO":
+    def sorted(self, shape) -> "MultiCOO":
         # Inspired by sparse.COO
         # See https://github.com/pydata/sparse/blob/main/LICENSE
         # This is the BSD 3-clause license
@@ -30,6 +31,19 @@ class MultiCOO(NamedTuple):
             signal=self.signal[order],
             axis=[a[order] for a in self.axis],
         )
+
+    def sort(self, shape) -> None:
+        # Inspired by sparse.COO
+        # See https://github.com/pydata/sparse/blob/main/LICENSE
+        # This is the BSD 3-clause license
+
+        linear = np.ravel_multi_index(self.coords, shape)
+        if np.all(np.diff(linear) >= 0):
+            return
+        order = np.argsort(linear)
+        self.coords = self.coords[:, order]
+        self.signal = self.signal[order]
+        self.axis = [a[order] for a in self.axis]
 
     def acc_duplicates(
         self,

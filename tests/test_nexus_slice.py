@@ -13,7 +13,7 @@ import h5py
 
 from ms_nexus_tools.lib.chunker import count_chunks_to_cover
 from ms_nexus_tools.api import nexus_slice, data_convert
-from ms_nexus_tools.lib.data_source import Axis, AxisDensity
+from ms_nexus_tools.lib.data_source import Axis, AxisType
 from ms_nexus_tools.api.nexus_slice import (
     SliceType,
     ActionType,
@@ -34,8 +34,8 @@ def man_data_and_nexus():
     man_data_source = man_source.ManSource(
         man_data,
         supplimentary_axes=[
-            Axis("time", 0, AxisDensity.CONTINUOUS, np.int16, "s"),
-            Axis("error", 2, AxisDensity.CONTINUOUS, np.int16, ""),
+            Axis("time", 0, AxisType.EXACT, np.int16, "s"),
+            Axis("error", 2, AxisType.EXACT, np.int16, ""),
         ],
         multipliers=dict(x=0.1, y=0.1, mz=0.1, time=1.0, error=1.0),
     )
@@ -521,8 +521,8 @@ def test_binned_axis(man_data_and_nexus, nx_dir):
         man_data_source = man_source.ManSource(
             man_data,
             supplimentary_axes=[
-                Axis("mz", 2, AxisDensity.BINNED, np.int16, "mz"),
-                Axis("error", 2, AxisDensity.BINNED, np.int16, ""),
+                Axis("mz", 2, AxisType.BINNED, np.int16, "mz"),
+                Axis("error", 2, AxisType.BINNED, np.int16, ""),
             ],
             multipliers=dict(x=0.1, y=0.1, mz=0.1, error=1.0),
         )
