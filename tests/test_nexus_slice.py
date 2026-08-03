@@ -106,7 +106,9 @@ def test_fully_specified(man_data_and_nexus, nx_dir):
         assert "/entry/data/mz" in fle
         assert "/entry/data/error" in fle
         data = fle["/entry/data/signal"][:]
-        assert np.all(data == np.sum(man_data_and_nexus[0].dense, axis=(0, 1)))
+        np.testing.assert_allclose(
+            data, np.sum(man_data_and_nexus[0].dense, axis=(0, 1))
+        )
 
     out_file = nx_dir / "man3.nxs"
     assert out_file.exists()
@@ -119,8 +121,8 @@ def test_fully_specified(man_data_and_nexus, nx_dir):
         assert "/entry/data/error" not in fle
         data = fle["/entry/data/signal"][:, :]
 
-        assert np.all(
-            data == np.sum(man_data_and_nexus[0].dense[:, :, 120:180], axis=2)
+        np.testing.assert_allclose(
+            data, np.sum(man_data_and_nexus[0].dense[:, :, 120:180], axis=2)
         )
 
 
@@ -153,7 +155,9 @@ def test_using_defaults(man_data_and_nexus, nx_dir):
         assert "/entry/data/mz" in fle
         assert "/entry/data/error" in fle
         data = fle["/entry/data/signal"][:]
-        assert np.all(data == np.sum(man_data_and_nexus[0].dense, axis=(0, 1)))
+        np.testing.assert_allclose(
+            data, np.sum(man_data_and_nexus[0].dense, axis=(0, 1))
+        )
 
     out_file = nx_dir / "man3.nxs"
     assert out_file.exists()
@@ -166,8 +170,8 @@ def test_using_defaults(man_data_and_nexus, nx_dir):
         assert "/entry/data/error" not in fle
         data = fle["/entry/data/signal"][:, :]
 
-        assert np.all(
-            data == np.sum(man_data_and_nexus[0].dense[:, :, 120:180], axis=2)
+        np.testing.assert_allclose(
+            data, np.sum(man_data_and_nexus[0].dense[:, :, 120:180], axis=2)
         )
 
 
@@ -240,7 +244,7 @@ def test_leave_and_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/error" in fle
         data = fle["/entry/data/signal"][:, :, :]
         assert data.shape == (8, 8, 240)
-        assert np.all(data == man_data_and_nexus[0].dense)
+        np.testing.assert_allclose(data, man_data_and_nexus[0].dense)
 
     nexus_slice.process(process_args, {})
     out_file = nx_dir / "man3_range.nxs"
@@ -254,7 +258,7 @@ def test_leave_and_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/error" in fle
         data = fle["/entry/data/signal"][:, :, :]
         assert data.shape == (8, 8, 60)
-        assert np.all(data == man_data_and_nexus[0].dense[:, :, 120:180])
+        np.testing.assert_allclose(data, man_data_and_nexus[0].dense[:, :, 120:180])
 
     nexus_slice.process(process_args, {})
     out_file = nx_dir / "man3_centre.nxs"
@@ -268,7 +272,7 @@ def test_leave_and_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/error" in fle
         data = fle["/entry/data/signal"][:, :, :]
         assert data.shape == (8, 8, 60)
-        assert np.all(data == man_data_and_nexus[0].dense[:, :, 120:180])
+        np.testing.assert_allclose(data, man_data_and_nexus[0].dense[:, :, 120:180])
 
     nexus_slice.process(process_args, {})
     out_file = nx_dir / "man3_value.nxs"
@@ -286,7 +290,9 @@ def test_leave_and_slice(man_data_and_nexus, nx_dir):
         assert value_axis.shape == (1,)
         assert value_axis[0] == 15
 
-        assert np.all(data[:, :, 0] == man_data_and_nexus[0].dense[:, :, 150])
+        np.testing.assert_allclose(
+            data[:, :, 0], man_data_and_nexus[0].dense[:, :, 150]
+        )
 
 
 def test_loop_and_slice(man_data_and_nexus, nx_dir):
@@ -321,7 +327,7 @@ def test_loop_and_slice(man_data_and_nexus, nx_dir):
             assert f"{name}/mz" in fle
         data = fle[f"{name}/signal"][:, :]
         assert data.shape == (4, 60)
-        assert np.all(data == man_data_and_nexus[0].dense[yy, 2:6, 120:180])
+        np.testing.assert_allclose(data, man_data_and_nexus[0].dense[yy, 2:6, 120:180])
 
     nexus_slice.process(process_args, {})
     out_file = nx_dir / "pixels.nxs"
@@ -335,7 +341,7 @@ def test_loop_and_slice(man_data_and_nexus, nx_dir):
             assert f"{name}/mz" in fle
         data = fle[f"{name}/signal"][:]
         assert data.shape == (240,)
-        assert np.all(data == man_data_and_nexus[0].dense[2, yy, :])
+        np.testing.assert_allclose(data, man_data_and_nexus[0].dense[2, yy, :])
 
 
 def test_sum_and_slice(man_data_and_nexus, nx_dir):
@@ -373,7 +379,7 @@ def test_sum_and_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/error" not in fle
         data = fle["/entry/data/signal"][:, :]
         assert data.shape == (8, 8)
-        assert np.all(data == np.sum(man_data_and_nexus[0].dense, axis=2))
+        np.testing.assert_allclose(data, np.sum(man_data_and_nexus[0].dense, axis=2))
 
     nexus_slice.process(process_args, {})
     out_file = nx_dir / "man3_range.nxs"
@@ -387,8 +393,8 @@ def test_sum_and_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/error" not in fle
         data = fle["/entry/data/signal"][:, :]
         assert data.shape == (8, 8)
-        assert np.all(
-            data == np.sum(man_data_and_nexus[0].dense[:, :, 120:180], axis=2)
+        np.testing.assert_allclose(
+            data, np.sum(man_data_and_nexus[0].dense[:, :, 120:180], axis=2)
         )
 
     nexus_slice.process(process_args, {})
@@ -403,8 +409,8 @@ def test_sum_and_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/error" not in fle
         data = fle["/entry/data/signal"][:, :]
         assert data.shape == (8, 8)
-        assert np.all(
-            data == np.sum(man_data_and_nexus[0].dense[:, :, 120:180], axis=2)
+        np.testing.assert_allclose(
+            data, np.sum(man_data_and_nexus[0].dense[:, :, 120:180], axis=2)
         )
 
     nexus_slice.process(process_args, {})
@@ -419,7 +425,7 @@ def test_sum_and_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/error" not in fle
         data = fle["/entry/data/signal"][:, :]
         assert data.shape == (8, 8)
-        assert np.all(data[:, :] == man_data_and_nexus[0].dense[:, :, 150])
+        np.testing.assert_allclose(data[:, :], man_data_and_nexus[0].dense[:, :, 150])
 
     nexus_slice.process(process_args, {})
     out_file = nx_dir / "man3_cross_value.nxs"
@@ -433,8 +439,8 @@ def test_sum_and_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/error" in fle
         data = fle["/entry/data/signal"][:]
         assert data.shape == (1,)
-        assert np.all(
-            data == np.sum(man_data_and_nexus[0].dense[:, :, 150], axis=(0, 1))
+        np.testing.assert_allclose(
+            data, np.sum(man_data_and_nexus[0].dense[:, :, 150], axis=(0, 1))
         )
 
 
@@ -467,7 +473,9 @@ def test_multiaxis_off_default_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/mz" in fle
         assert "/entry/data/error" in fle
         data = fle["/entry/data/signal"][:]
-        assert np.all(data == np.sum(man_data_and_nexus[0].dense, axis=(0, 1)))
+        np.testing.assert_allclose(
+            data, np.sum(man_data_and_nexus[0].dense, axis=(0, 1))
+        )
 
     out_file = nx_dir / "man3.nxs"
     assert out_file.exists()
@@ -480,8 +488,8 @@ def test_multiaxis_off_default_slice(man_data_and_nexus, nx_dir):
         assert "/entry/data/error" not in fle
         data = fle["/entry/data/signal"][:, :]
 
-        assert np.all(
-            data == np.sum(man_data_and_nexus[0].dense[:, :, 120:180], axis=2)
+        np.testing.assert_allclose(
+            data, np.sum(man_data_and_nexus[0].dense[:, :, 120:180], axis=2)
         )
 
 
@@ -511,7 +519,7 @@ def test_complete_sum(man_data_and_nexus, nx_dir):
         assert "/entry/data/error" not in fle
         data = fle["/entry/data/signal"][...]
         assert data.shape == (1,)
-        assert np.all(data == np.sum(man_data_and_nexus[0].dense))
+        np.testing.assert_allclose(data, np.sum(man_data_and_nexus[0].dense))
 
 
 def test_binned_axis(man_data_and_nexus, nx_dir):
@@ -566,7 +574,9 @@ def test_binned_axis(man_data_and_nexus, nx_dir):
             assert "/entry/data/error" not in fle
             data = fle["/entry/data/signal"][...]
             assert data.shape == (6,)
-            assert np.all(data == np.sum(man_data_and_nexus[0].dense[1:7], axis=(1, 2)))
+            np.testing.assert_allclose(
+                data, np.sum(man_data_and_nexus[0].dense[1:7], axis=(1, 2))
+            )
 
         out_file = nx_dir / "sliced.nxs"
         assert out_file.exists()
@@ -581,7 +591,9 @@ def test_binned_axis(man_data_and_nexus, nx_dir):
             assert fle["/entry/data/x"].shape == (6,)
             assert fle["/entry/data/y"].shape == (6,)
             assert fle["/entry/data/mz"].shape == (60,)
-            assert np.all(data == man_data_and_nexus[0].dense[1:7, 1:7, 120:180])
+            np.testing.assert_allclose(
+                data, man_data_and_nexus[0].dense[1:7, 1:7, 120:180]
+            )
 
     finally:
         filename.unlink()

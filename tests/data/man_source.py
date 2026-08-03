@@ -96,6 +96,7 @@ class ManSource(AbstractDataSource):
         self.axis_order = [self.axis_order[oo] for oo in order]
 
         self.axis_values = [np.array([])] * 3
+        self.axis_names = [""] * 3
         shape = [0, 0, 0]
         for ax in self.axes.values():
             if shape[ax.primary_axis] == 0:
@@ -105,6 +106,7 @@ class ManSource(AbstractDataSource):
                 else:
                     self.axis_values[ax.primary_axis] = self.exact_axis_values(ax)
                     shape[ax.primary_axis] = len(self.axis_values[ax.primary_axis])
+                self.axis_names[ax.primary_axis] = ax.name
         self.total_shape = Shape(shape)
 
     def __enter__(self):
@@ -212,7 +214,7 @@ class ManSource(AbstractDataSource):
 
         Parameters:
         memory_chunk:   The bounds of the data to read.
-        fill_axis:      The list of sparce axis to fill.
+        axes:           The list of axis used for each dimension.
         update:         A callback to update progress.
                         The total of the progress counter is
                         sum([chunk_read_count(mc) for mc in all_memory_chunks])
@@ -230,6 +232,8 @@ class ManSource(AbstractDataSource):
             pos = self.man_data.total_pos[:, :]
             for ii in range(3):
                 axis_values = self.axis_values[ii][memory_chunk[ii]]
-                mask &= (pos[ii, :] >= axis_values[0]) & (pos[ii, :] <= axis_values[-1])
+                axis_name = self.axis_names[ii]
+                axis_pos = pos[ii, :] * self.multipliers[axis_name]
+                mask &= (axis_pos >= axis_values[0]) & (axis_pos <= axis_values[-1])
             return MultiCOO(pos[:, mask], self.man_data.total_int[mask], [])
         return self.man_data.dense[*memory_chunk]

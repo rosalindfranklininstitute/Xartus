@@ -152,7 +152,7 @@ class AbstractDataSource(AbstractContextManager):
 
         Parameters:
         memory_chunk:   The bounds of the data to read.
-        fill_axis:      The list of sparce axis to fill.
+        axes:           The list of axis used for each dimension.
         update:         A callback to update progress.
                         The total of the progress counter is
                         sum([chunk_read_count(mc) for mc in all_memory_chunks])

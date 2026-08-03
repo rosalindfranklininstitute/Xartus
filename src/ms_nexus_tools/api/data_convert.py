@@ -35,6 +35,7 @@ from ..lib.data_source import (
 )
 from ..lib.multi_coo import (
     MultiCOO,
+    find_uniques,
 )
 from ..lib.bounds import Chunk, Shape
 from ..lib.chunker import Chunker, count_chunks_to_cover
@@ -543,13 +544,31 @@ def write_data(
     try:
         for axis in binned_axes:
             edges = args.data_source.binned_axis_edges(axis)
-            labels = np.searchsorted(edges, chunk_data.coords[axis.primary_axis, :])
+            labels = np.searchsorted(
+                edges[:-2], chunk_data.coords[axis.primary_axis, :]
+            )
             chunk_data.coords[axis.primary_axis, :] = labels
         chunk_data.sort(full_shape)
-        final_data, counts = chunk_data.acc_duplicates(
-            full_shape,
-            count=True,
+        #
+        # final_data, tmp_counts = chunk_data.acc_duplicates(full_shape, count=True)
+
+        unique_inds, counts = find_uniques(chunk_data.coords, full_shape, count=True)
+
+        unique_coords = chunk_data.coords[:, unique_inds]
+        accumulated_signal = np.add.reduceat(
+            chunk_data.signal, unique_inds, dtype=chunk_data.signal.dtype
         )
+        # np.testing.assert_allclose(accumulated_signal, final_data.signal)
+
+        # for axis in binned_axes:
+        #     exact = np.maximum.reduceat(
+        #         chunk_data.coords[axis.primary_axis, :], unique_inds, dtype=axis.dtype
+        #     )
+
+        # final_data, counts = chunk_data.acc_duplicates(
+        #     full_shape,
+        #     count=True,
+        # )
     except ValueError:
         ic(full_shape)
         ic(memory_chunk.shape)
@@ -559,8 +578,8 @@ def write_data(
         raise
 
     signal_data = sparse.COO(
-        coords=final_data.coords,
-        data=final_data.signal,
+        coords=unique_coords,
+        data=accumulated_signal,
         shape=full_shape,
         sorted=True,
         has_duplicates=False,
@@ -568,7 +587,7 @@ def write_data(
     )
 
     count_data = sparse.COO(
-        coords=final_data.coords,
+        coords=unique_coords,
         data=counts,
         shape=full_shape,
         sorted=True,
@@ -579,18 +598,20 @@ def write_data(
     data_chunk_values = [
         (entry, chunker, dtype) for entry, chunker, dtype in data_chunks.items()
     ]
+    if unique_coords.shape[1] == 0:
+        raise ValueError("No data provided to converter.")
 
     for data_entry, _, _ in tqdm(data_chunk_values, desc="Processing data chunks"):
         ds = nxs.root[data_entry].data.signal
 
         f_space = ds.id.get_space()
-        f_space.select_elements(final_data.coords.T, h5s.SELECT_SET)
-        m_space = h5s.create_simple(final_data.signal.shape)
+        f_space.select_elements(unique_coords.T, h5s.SELECT_SET)
+        m_space = h5s.create_simple(accumulated_signal.shape)
 
         if data_entry == _count_subentry_name():
             ds.id.write(m_space, f_space, counts)
         else:
-            ds.id.write(m_space, f_space, final_data.signal)
+            ds.id.write(m_space, f_space, accumulated_signal)
 
         f_space.close()
         m_space.close()

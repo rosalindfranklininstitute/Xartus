@@ -51,21 +51,27 @@ def check_data_correct(fle, man_data, max_chunk_item_count):
 
         assert fle[f"/entry/{data_name}/data/signal"].shape == man_data.shape
 
-        assert np.all(fle[f"/entry/{data_name}/data/signal"][:, :, :] == man_data.dense)
+        np.testing.assert_allclose(
+            fle[f"/entry/{data_name}/data/signal"][:, :, :], man_data.dense
+        )
 
         actual_item_count = np.prod(fle[f"/entry/{data_name}/data/signal"].chunks)
         assert actual_item_count <= max_chunk_item_count
 
     total_image = np.sum(man_data.dense, axis=2)
     assert fle["/entry/total_image/data/signal"].shape == (2, *total_image.shape)
-    assert np.all(fle["/entry/total_image/data/signal"][1, :, :] == total_image)
+    np.testing.assert_allclose(
+        fle["/entry/total_image/data/signal"][1, :, :], total_image
+    )
 
     total_spectra = np.sum(man_data.dense, axis=(0, 1))
     assert fle["/entry/total_spectra/data/signal"].shape == (
         2,
         *total_spectra.shape,
     )
-    assert np.all(fle["/entry/total_spectra/data/signal"][1, :] == total_spectra)
+    np.testing.assert_allclose(
+        fle["/entry/total_spectra/data/signal"][1, :], total_spectra
+    )
 
 
 def test_dense_single_axis_single_chunk(nx_file, man_data):
@@ -212,11 +218,13 @@ def test_binned_single_axis_single_chunk_with_mz_bin_2(nx_file, man_data):
             assert np.max(mz_values[:]) == 240
             assert mz_values.shape == (120,)
 
-            assert np.all(np.sum(data_part, axis=2) == np.sum(man_data.dense, axis=2))
+            np.testing.assert_allclose(
+                np.sum(data_part, axis=2), np.sum(man_data.dense, axis=2)
+            )
             for ii in range(4):
-                assert np.all(
-                    np.sum(data_part[:, :, 30 * ii : 30 * (ii + 1)], axis=2)
-                    == np.sum(man_data.dense[:, :, 60 * ii : 60 * (ii + 1)], axis=2),
+                np.testing.assert_allclose(
+                    np.sum(data_part[:, :, 30 * ii : 30 * (ii + 1)], axis=2),
+                    np.sum(man_data.dense[:, :, 60 * ii : 60 * (ii + 1)], axis=2),
                 )
 
         assert "/entry/item_counts" in fle

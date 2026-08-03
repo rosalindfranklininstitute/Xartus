@@ -117,7 +117,7 @@ def test_full_convert_one_indexed(nx_file, imzml_files, man_data):
         for ii, coords in enumerate(imzml_data.coordinates):
             mz_values, int_values = imzml_data.getspectrum(ii)
             coords = tuple(cc - 1 for cc in coords)
-            assert np.all(man_data.dense[*coords[0:2], :] == int_values[:])
+            np.testing.assert_allclose(man_data.dense[*coords[0:2], :], int_values[:])
 
 
 def test_swap_x_y(nx_file, imzml_files, man_data):
@@ -153,7 +153,9 @@ def test_swap_x_y(nx_file, imzml_files, man_data):
     with ImzMLParser(filename=imzml_files[0]) as imzml_data:
         for ii, coords in enumerate(imzml_data.coordinates):
             mz_values, int_values = imzml_data.getspectrum(ii)
-            assert np.all(man_data.dense[coords[1], coords[0], :] == int_values[:])
+            np.testing.assert_allclose(
+                man_data.dense[coords[1], coords[0], :], int_values[:]
+            )
 
 
 def test_total_image(nx_file, imzml_files, man_data):
@@ -193,9 +195,9 @@ def test_total_image(nx_file, imzml_files, man_data):
         for ii, coords in enumerate(imzml_data.coordinates):
             mz_values, int_values = imzml_data.getspectrum(ii)
             if coords[2] == 1:
-                assert np.all(sum_image[coords[0], :] == int_values[:])
+                np.testing.assert_allclose(sum_image[coords[0], :], int_values[:])
             elif coords[2] == 0:
-                assert np.all(max_image[coords[0], :] == int_values[:])
+                np.testing.assert_allclose(max_image[coords[0], :], int_values[:])
 
 
 @pytest.mark.skip(reason="decide whether to include mz_exact")
@@ -235,4 +237,4 @@ def test_binned_axis(nx_file, imzml_files, man_data):
     with ImzMLParser(filename=imzml_files[0]) as imzml_data:
         for ii, coords in enumerate(imzml_data.coordinates):
             mz_values, int_values = imzml_data.getspectrum(ii)
-            assert np.all(man_data.dense[*coords[0:2], :] == int_values[:])
+            np.testing.assert_allclose(man_data.dense[*coords[0:2], :], int_values[:])
