@@ -235,5 +235,13 @@ class ManSource(AbstractDataSource):
                 axis_name = self.axis_names[ii]
                 axis_pos = pos[ii, :] * self.multipliers[axis_name]
                 mask &= (axis_pos >= axis_values[0]) & (axis_pos <= axis_values[-1])
-            return MultiCOO(pos[:, mask], self.man_data.total_int[mask], [])
+
+            values = {
+                ax.name: pos[ax.primary_axis] * self.multipliers[ax.name]
+                for ax in self.axes.values()
+                if ax.axis_type == AxisType.BINNED
+            }
+            values["signal"] = self.man_data.total_int[mask]
+
+            return MultiCOO(pos[:, mask], values)
         return self.man_data.dense[*memory_chunk]

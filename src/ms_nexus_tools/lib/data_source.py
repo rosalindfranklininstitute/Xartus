@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: Apache-2.0
-import sparse
 
 from contextlib import AbstractContextManager
 from typing import Any, Callable, NamedTuple
@@ -110,7 +109,7 @@ class AbstractDataSource(AbstractContextManager):
         For examlpe simple image data (x,y, spectra):
         axis(0) : Axis('x', 0, [], EXACT, 'um')
         axis(1) : Axis('y', 1, [], EXACT, 'um')
-        If is it continuous:
+        If is it exact:
         axis(2) : Axis('mz', 2, [], EXACT, 'mz')
         if it is only peaks:
         axis(2) : Axis('mz', 2, [0,1], BINNED, 'mz')
@@ -119,13 +118,13 @@ class AbstractDataSource(AbstractContextManager):
     @abstractmethod
     def exact_axis_values(self, axis: Axis) -> np.ndarray:
         """
-        Returns the values for the specified continuous axis.
+        Returns the values for the specified exact axis.
         """
 
     @abstractmethod
     def binned_axis_edges(self, axis: Axis) -> np.ndarray:
         """
-        Returns the bin edges used to histogram the given sparse axis.
+        Returns the bin edges used to histogram the given binned axis.
         This is used for generting the output accumulations accros this axis, if required.
         """
 
@@ -152,7 +151,6 @@ class AbstractDataSource(AbstractContextManager):
 
         Parameters:
         memory_chunk:   The bounds of the data to read.
-        axes:           The list of axis used for each dimension.
         update:         A callback to update progress.
                         The total of the progress counter is
                         sum([chunk_read_count(mc) for mc in all_memory_chunks])

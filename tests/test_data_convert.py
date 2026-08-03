@@ -350,6 +350,12 @@ def test_binned_multi_binned_axis_single_chunk(nx_file, man_data):
             assert f"/entry/{data_name}/data/mz" in fle
             assert f"/entry/{data_name}/data/error" in fle
 
+            assert f"/entry/{data_name}/data/mz_exact" in fle
+            assert "mz_exact_indices" in fle[f"/entry/{data_name}/data/"].attrs
+
+            assert f"/entry/{data_name}/data/error_exact" in fle
+            assert "error_exact_indices" in fle[f"/entry/{data_name}/data/"].attrs
+
             assert "x_indices" in fle[f"/entry/{data_name}/data/"].attrs
             assert "y_indices" in fle[f"/entry/{data_name}/data/"].attrs
             assert "mz_indices" in fle[f"/entry/{data_name}/data/"].attrs
@@ -362,3 +368,8 @@ def test_binned_multi_binned_axis_single_chunk(nx_file, man_data):
             assert fle[f"/entry/{data_name}/data/"].attrs["y_indices"] == 1
             assert fle[f"/entry/{data_name}/data/"].attrs["mz_indices"] == 2
             assert fle[f"/entry/{data_name}/data/"].attrs["error_indices"] == 2
+
+            np.testing.assert_allclose(
+                fle[f"/entry/{data_name}/data/mz_exact"][:, :, :],
+                fle[f"/entry/{data_name}/data/error_exact"][:, :, :],
+            )

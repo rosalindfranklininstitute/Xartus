@@ -200,7 +200,6 @@ def test_total_image(nx_file, imzml_files, man_data):
                 np.testing.assert_allclose(max_image[coords[0], :], int_values[:])
 
 
-@pytest.mark.skip(reason="decide whether to include mz_exact")
 def test_binned_axis(nx_file, imzml_files, man_data):
 
     man_data_source = man_source.ManSource(

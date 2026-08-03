@@ -299,7 +299,7 @@ def provision_data_axis(
     axis_definitions = args.data_source.axis_definitions()
 
     any_binned_axis = False
-    for entry_name, _, _ in data_chunks.items():
+    for entry_name, chunker, _ in data_chunks.items():
         group_axes = NxAxes()
         for _ in full_shape:
             group_axes.append([])
@@ -324,6 +324,7 @@ def provision_data_axis(
                             "Only BINNED axis with primary_axis == (last dimension) are supported."
                         )
                     any_binned_axis = True
+                    all_axis: list[int] = list(range(axis.primary_axis + 1))
                     values = args.data_source.binned_axis_edges(axis)[1:]
                     if len(values) != full_shape[axis.primary_axis]:
                         raise InvalidAxisError(
@@ -336,7 +337,18 @@ def provision_data_axis(
                         indices=[axis.primary_axis],
                         unit=axis.units,
                     )
-                    group_axes[axis.primary_axis].append(nx_axis)
+                    nx_axis_exact = NxAxis.create_empty(
+                        name=f"{axis.name}_exact",
+                        indices=all_axis,
+                        unit=axis.units,
+                        shape=tuple(chunker.data_shape[ii] for ii in all_axis),
+                        compression=args.field_options.compression,
+                        compression_opts=args.field_options.compression_opts,
+                        chunks=chunker.chunk_shape,
+                        dtype=axis.dtype,
+                        fillvalue=np.nan,
+                    )
+                    group_axes[axis.primary_axis].extend([nx_axis, nx_axis_exact])
                 case _:
                     raise InvalidAxisError(f"Unknown Axis type: {axis.axis_type}")
         group_axes.add_to_group(nxs.root[entry_name]["data"])
@@ -542,6 +554,9 @@ def write_data(
         )
 
     try:
+        if chunk_data.coords.shape[1] == 0:
+            raise ValueError("No data provided to converter.")
+
         for axis in binned_axes:
             edges = args.data_source.binned_axis_edges(axis)
             labels = np.searchsorted(
@@ -549,26 +564,13 @@ def write_data(
             )
             chunk_data.coords[axis.primary_axis, :] = labels
         chunk_data.sort(full_shape)
-        #
-        # final_data, tmp_counts = chunk_data.acc_duplicates(full_shape, count=True)
-
-        unique_inds, counts = find_uniques(chunk_data.coords, full_shape, count=True)
-
-        unique_coords = chunk_data.coords[:, unique_inds]
-        accumulated_signal = np.add.reduceat(
-            chunk_data.signal, unique_inds, dtype=chunk_data.signal.dtype
+        counts = chunk_data.acc_duplicates(
+            full_shape,
+            count=True,
+            accumulators={"signal": np.add},
+            default_accumulator=np.maximum,
         )
-        # np.testing.assert_allclose(accumulated_signal, final_data.signal)
 
-        # for axis in binned_axes:
-        #     exact = np.maximum.reduceat(
-        #         chunk_data.coords[axis.primary_axis, :], unique_inds, dtype=axis.dtype
-        #     )
-
-        # final_data, counts = chunk_data.acc_duplicates(
-        #     full_shape,
-        #     count=True,
-        # )
     except ValueError:
         ic(full_shape)
         ic(memory_chunk.shape)
@@ -578,8 +580,8 @@ def write_data(
         raise
 
     signal_data = sparse.COO(
-        coords=unique_coords,
-        data=accumulated_signal,
+        coords=chunk_data.coords,
+        data=chunk_data["signal"],
         shape=full_shape,
         sorted=True,
         has_duplicates=False,
@@ -587,7 +589,7 @@ def write_data(
     )
 
     count_data = sparse.COO(
-        coords=unique_coords,
+        coords=chunk_data.coords,
         data=counts,
         shape=full_shape,
         sorted=True,
@@ -598,23 +600,35 @@ def write_data(
     data_chunk_values = [
         (entry, chunker, dtype) for entry, chunker, dtype in data_chunks.items()
     ]
-    if unique_coords.shape[1] == 0:
-        raise ValueError("No data provided to converter.")
 
+    axis_names = [axis.name for axis in binned_axes]
+    axis_used = dict.fromkeys(axis_names, False)
     for data_entry, _, _ in tqdm(data_chunk_values, desc="Processing data chunks"):
-        ds = nxs.root[data_entry].data.signal
+        for name in chunk_data.values:
+            if name != "signal" and name not in axis_names:
+                raise IndexError(f"Values provided for {name}, but axis is not binned.")
 
-        f_space = ds.id.get_space()
-        f_space.select_elements(unique_coords.T, h5s.SELECT_SET)
-        m_space = h5s.create_simple(accumulated_signal.shape)
+            if name == "signal":
+                ds = nxs.root[data_entry].data.signal
+            else:
+                ds = nxs.root[data_entry].data[f"{name}_exact"]
+                axis_used[name] = True
 
-        if data_entry == _count_subentry_name():
-            ds.id.write(m_space, f_space, counts)
-        else:
-            ds.id.write(m_space, f_space, accumulated_signal)
+            f_space = ds.id.get_space()
+            f_space.select_elements(chunk_data.coords.T, h5s.SELECT_SET)
+            m_space = h5s.create_simple(chunk_data["signal"].shape)
 
-        f_space.close()
-        m_space.close()
+            if data_entry == _count_subentry_name():
+                ds.id.write(m_space, f_space, counts)
+            else:
+                ds.id.write(m_space, f_space, chunk_data["signal"])
+
+            f_space.close()
+            m_space.close()
+
+    for k, v in axis_used.items():
+        if not v:
+            raise ValueError(f"Expected values for binned axis {k}")
 
     return signal_data, count_data
 
