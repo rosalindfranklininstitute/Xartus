@@ -542,42 +542,32 @@ def write_data(
 ) -> tuple[np.ndarray, None] | tuple[sparse.COO, sparse.COO]:
     if len(binned_axes) == 0:
         if not isinstance(chunk_data, np.ndarray):
-            raise ValueError("Data is not binned, expected a full block of data.")
+            raise ValueError("Data is not sparse, expected a full block of data.")
 
         for data_entry in data_chunks.names:
             assert data_entry != _count_subentry_name()
             nxs.root[data_entry].data.signal[*memory_chunk] = chunk_data
         return chunk_data, None
+
     if isinstance(chunk_data, np.ndarray):
         raise TypeError(
-            "Recived a binned axis, with dense data. The data should be binned. ",
+            "Recived a binned axis, with dense data. The data should be sparse. ",
         )
 
-    try:
-        if chunk_data.coords.shape[1] == 0:
-            raise ValueError("No data provided to converter.")
+    if chunk_data.coords.shape[1] == 0:
+        raise ValueError("No data provided to converter.")
 
-        for axis in binned_axes:
-            edges = args.data_source.binned_axis_edges(axis)
-            labels = np.searchsorted(
-                edges[:-2], chunk_data.coords[axis.primary_axis, :]
-            )
-            chunk_data.coords[axis.primary_axis, :] = labels
-        chunk_data.sort(full_shape)
-        counts = chunk_data.acc_duplicates(
-            full_shape,
-            count=True,
-            accumulators={"signal": np.add},
-            default_accumulator=np.maximum,
-        )
-
-    except ValueError:
-        ic(full_shape)
-        ic(memory_chunk.shape)
-        ic(chunk_data.coords.shape)
-        ic(np.min(chunk_data.coords, axis=1))
-        ic(np.max(chunk_data.coords, axis=1))
-        raise
+    for axis in binned_axes:
+        edges = args.data_source.binned_axis_edges(axis)
+        labels = np.searchsorted(edges[:-2], chunk_data.coords[axis.primary_axis, :])
+        chunk_data.coords[axis.primary_axis, :] = labels
+    chunk_data.sort(full_shape)
+    counts = chunk_data.acc_duplicates(
+        full_shape,
+        count=True,
+        accumulators={"signal": np.add},
+        default_accumulator=np.maximum,
+    )
 
     signal_data = sparse.COO(
         coords=chunk_data.coords,
