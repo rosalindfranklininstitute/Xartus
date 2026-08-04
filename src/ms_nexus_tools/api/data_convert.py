@@ -534,7 +534,6 @@ def write_data(
     chunk_data: np.ndarray | MultiCOO,
     data_chunks: DataChunks,
 ) -> tuple[np.ndarray, None] | tuple[sparse.COO, sparse.COO]:
-
     if isinstance(chunk_data, np.ndarray):
         if len(binned_axes) != 0:
             raise TypeError(
@@ -549,7 +548,6 @@ def write_data(
     if chunk_data.coords.shape[1] == 0:
         null = sparse.COO(coords=[], data=[], shape=full_shape)
         return null, null
-        raise ValueError("No data provided to converter.")
 
     chunk_data.sort(full_shape)
     counts = chunk_data.acc_duplicates(
