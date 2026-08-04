@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: Apache-2.0
-
 from typing import Any, Iterable, Generator
 from threading import Lock, local
 import concurrent.futures as cfutures
@@ -321,12 +320,7 @@ def provision_data_axis(
                     )
                     group_axes[axis.primary_axis].append(nx_axis)
                 case AxisType.BINNED:
-                    if axis.primary_axis != len(full_shape) - 1:
-                        raise InvalidAxisError(
-                            "Only BINNED axis with primary_axis == (last dimension) are supported."
-                        )
                     any_binned_axis = True
-                    all_axis: list[int] = list(range(axis.primary_axis + 1))
                     values = args.data_source.binned_axis_edges(axis)[1:]
                     if len(values) != full_shape[axis.primary_axis]:
                         raise InvalidAxisError(
@@ -346,9 +340,9 @@ def provision_data_axis(
                     if entry_name != _count_subentry_name():
                         nx_axis_exact = NxAxis.create_empty(
                             name=f"{axis.name}_exact",
-                            indices=all_axis,
+                            indices=list(range(len(chunker.data_shape) + 1)),
                             unit=axis.units,
-                            shape=tuple(chunker.data_shape[ii] for ii in all_axis),
+                            shape=chunker.data_shape,
                             compression=args.field_options.compression,
                             compression_opts=args.field_options.compression_opts,
                             chunks=chunker.chunk_shape,
@@ -531,17 +525,6 @@ def provision_accumulation_subentries(
     return final_accumulations, count_accumulations
 
 
-def _unique(coords: np.ndarray, shape: Shape) -> np.ndarray:
-    linear: Intp1D = np.ravel_multi_index(coords, shape)
-    order = np.argsort(linear)
-    linear = linear[order]
-
-    unique_mask = np.diff(linear) != 0
-    unique_mask = np.append(True, unique_mask)
-
-    return coords[:, order][:, unique_mask]
-
-
 def write_data(
     nxs: NexusFile,
     args: ProcessArgs,
@@ -551,21 +534,21 @@ def write_data(
     chunk_data: np.ndarray | MultiCOO,
     data_chunks: DataChunks,
 ) -> tuple[np.ndarray, None] | tuple[sparse.COO, sparse.COO]:
-    if len(binned_axes) == 0:
-        if not isinstance(chunk_data, np.ndarray):
-            raise ValueError("Data is not sparse, expected a full block of data.")
+
+    if isinstance(chunk_data, np.ndarray):
+        if len(binned_axes) != 0:
+            raise TypeError(
+                "Recived a binned axis, with dense data. The data should be sparse. ",
+            )
 
         for data_entry in data_chunks.names:
             assert data_entry != _count_subentry_name()
             nxs.root[data_entry].data.signal[*memory_chunk] = chunk_data
         return chunk_data, None
 
-    if isinstance(chunk_data, np.ndarray):
-        raise TypeError(
-            "Recived a binned axis, with dense data. The data should be sparse. ",
-        )
-
     if chunk_data.coords.shape[1] == 0:
+        null = sparse.COO(coords=[], data=[], shape=full_shape)
+        return null, null
         raise ValueError("No data provided to converter.")
 
     chunk_data.sort(full_shape)
@@ -575,6 +558,13 @@ def write_data(
         accumulators={"signal": np.add},
         default_accumulator=np.maximum,
     )
+    assert counts is not None
+
+    for name, value in chunk_data.values.items():
+        if value.shape != counts.shape:
+            raise ValueError(
+                f"Expected all signals to have shape {counts.shape} but '{name}' has shape {value.shape}"
+            )
 
     signal_data = sparse.COO(
         coords=chunk_data.coords,

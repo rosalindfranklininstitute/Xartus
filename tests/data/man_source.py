@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
+#
+# SPDX-License-Identifier: Apache-2.0
 from collections import defaultdict
 from pathlib import Path
 import json
@@ -14,6 +17,8 @@ from ms_nexus_tools.lib.data_source import (
     AxisType,
     UnknownAxisError,
 )
+
+from icecream import ic
 
 
 class ManData:
@@ -65,6 +70,7 @@ class ManSource(AbstractDataSource):
         supplimentary_axes: list[Axis] = [],
         multipliers: dict[str, float] = {},
         binning: dict[str, float] = {},
+        force_sparse: bool = False,
     ):
 
         self.multipliers: defaultdict[str, float] = defaultdict(lambda: 1.0)
@@ -84,7 +90,7 @@ class ManSource(AbstractDataSource):
 
         self.axis_order: list[str] = []
         axis_primary: list[int] = []
-        self.any_sparse = False
+        self.any_sparse = force_sparse
         for key, axis in self.axes.items():
             assert key == axis.name
             axis_primary.append(axis.primary_axis)
@@ -229,6 +235,8 @@ class ManSource(AbstractDataSource):
         if self.any_sparse:
             mask = np.full((self.man_data.total_int.shape[0],), True)
 
+            ic(memory_chunk)
+
             pos = np.array(
                 [
                     (
@@ -243,7 +251,7 @@ class ManSource(AbstractDataSource):
                 mask &= pos[ii, :] < memory_chunk[ii].stop
 
             values = {
-                ax.name: self.axis_values[ax.primary_axis][pos[ax.primary_axis, :] + 1]
+                ax.name: self.binned_axis_edges(ax)[pos[ax.primary_axis, mask] + 1]
                 for ax in self.axes.values()
                 if ax.axis_type == AxisType.BINNED
             }
