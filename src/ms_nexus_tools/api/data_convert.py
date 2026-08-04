@@ -12,8 +12,6 @@ import numpy.typing as npt
 import sparse
 from h5py import h5s
 
-from icecream import ic
-
 from tqdm import tqdm
 
 import hdf5plugin
@@ -35,7 +33,6 @@ from ..lib.data_source import (
 )
 from ..lib.multi_coo import (
     MultiCOO,
-    find_uniques,
 )
 from ..lib.bounds import Chunk, Shape
 from ..lib.chunker import Chunker, count_chunks_to_cover
@@ -311,6 +308,11 @@ def provision_data_axis(
                         raise InvalidAxisError(
                             f"Expected {full_shape[axis.primary_axis]} values for {axis.name} but recived {len(values)}.",
                         )
+                    if values.dtype != axis.dtype:
+                        raise TypeError(
+                            f"Expected {axis.dtype} values for {axis.name} but found {values.dtype}"
+                        )
+
                     nx_axis = NxAxis.create(
                         values=values,
                         name=axis.name,
@@ -330,6 +332,10 @@ def provision_data_axis(
                         raise InvalidAxisError(
                             f"Expected {full_shape[axis.primary_axis] + 1} edges for {axis.name} but recived {len(values) + 1}.",
                         )
+                    if values.dtype != axis.dtype:
+                        raise TypeError(
+                            f"Expected {axis.dtype} values for {axis.name} but found {values.dtype}"
+                        )
 
                     nx_axis = NxAxis.create(
                         values=values,
@@ -337,18 +343,23 @@ def provision_data_axis(
                         indices=[axis.primary_axis],
                         unit=axis.units,
                     )
-                    nx_axis_exact = NxAxis.create_empty(
-                        name=f"{axis.name}_exact",
-                        indices=all_axis,
-                        unit=axis.units,
-                        shape=tuple(chunker.data_shape[ii] for ii in all_axis),
-                        compression=args.field_options.compression,
-                        compression_opts=args.field_options.compression_opts,
-                        chunks=chunker.chunk_shape,
-                        dtype=axis.dtype,
-                        fillvalue=np.nan,
-                    )
-                    group_axes[axis.primary_axis].extend([nx_axis, nx_axis_exact])
+                    if entry_name != _count_subentry_name():
+                        nx_axis_exact = NxAxis.create_empty(
+                            name=f"{axis.name}_exact",
+                            indices=all_axis,
+                            unit=axis.units,
+                            shape=tuple(chunker.data_shape[ii] for ii in all_axis),
+                            compression=args.field_options.compression,
+                            compression_opts=args.field_options.compression_opts,
+                            chunks=chunker.chunk_shape,
+                            dtype=axis.dtype,
+                            fillvalue=0
+                            if np.issubdtype(axis.dtype, np.integer)
+                            else np.nan,
+                        )
+                        group_axes[axis.primary_axis].extend([nx_axis, nx_axis_exact])
+                    else:
+                        group_axes[axis.primary_axis].append(nx_axis)
                 case _:
                     raise InvalidAxisError(f"Unknown Axis type: {axis.axis_type}")
         group_axes.add_to_group(nxs.root[entry_name]["data"])
@@ -557,10 +568,6 @@ def write_data(
     if chunk_data.coords.shape[1] == 0:
         raise ValueError("No data provided to converter.")
 
-    for axis in binned_axes:
-        edges = args.data_source.binned_axis_edges(axis)
-        labels = np.searchsorted(edges[:-2], chunk_data.coords[axis.primary_axis, :])
-        chunk_data.coords[axis.primary_axis, :] = labels
     chunk_data.sort(full_shape)
     counts = chunk_data.acc_duplicates(
         full_shape,
@@ -600,18 +607,20 @@ def write_data(
 
             if name == "signal":
                 ds = nxs.root[data_entry].data.signal
+            elif data_entry == _count_subentry_name():
+                continue
             else:
                 ds = nxs.root[data_entry].data[f"{name}_exact"]
                 axis_used[name] = True
 
             f_space = ds.id.get_space()
             f_space.select_elements(chunk_data.coords.T, h5s.SELECT_SET)
-            m_space = h5s.create_simple(chunk_data["signal"].shape)
+            m_space = h5s.create_simple(chunk_data[name].shape)
 
             if data_entry == _count_subentry_name():
                 ds.id.write(m_space, f_space, counts)
             else:
-                ds.id.write(m_space, f_space, chunk_data["signal"])
+                ds.id.write(m_space, f_space, chunk_data[name])
 
             f_space.close()
             m_space.close()
@@ -672,6 +681,11 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
         add_items_to_group(args.data_source.experiment_metadata(), nxs.experiment)
 
         full_shape, is_dense, density = args.data_source.shape()
+
+        if any(s <= 0 for s in full_shape):
+            raise ValueError(
+                f"Invalid data shape {full_shape}. Each dimension must have at least 1 element."
+            )
 
         memory_chunks, total_read_count, size_per_item, data_chunks, default_name = (
             choose_memory_buffer_and_data_chunks(args, full_shape, density)

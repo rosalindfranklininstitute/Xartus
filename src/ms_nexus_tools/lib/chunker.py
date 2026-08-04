@@ -10,7 +10,6 @@ import numpy as np
 
 
 from .bounds import Chunk, Shape
-from icecream import ic
 
 
 def count_chunks_to_cover(data_shape: Shape, chunk_shape: Shape) -> list[int]:

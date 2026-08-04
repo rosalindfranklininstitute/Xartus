@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 from ms_nexus_tools.lib.utils import simplify_chunks
-from ms_nexus_tools.lib.h5_printer import print_group
 import bisect
 import copy
 from enum import Enum
@@ -18,7 +17,6 @@ from nexusformat.nexus import NeXusError, NXdata, NXsubentry
 import numpy as np
 import dask.array as da
 
-from icecream import ic
 
 from datargs.args import no_arg_field
 from datargs import (
@@ -393,7 +391,6 @@ class GroupParams:
     def assemble_final_axes(self, fle: h5py.File, chunk: Chunk) -> NxAxes:
         path = self.paths[0]
         dimension_actions = [self.axes[name].action_type for name in self.slice_axes]
-        ic(dimension_actions)
 
         axes = NxAxes(
             [[] for action in dimension_actions if action == ActionType.Leave]
@@ -423,8 +420,6 @@ class GroupParams:
                 dataset = fle[path][name]
                 values = dataset[*[chunk[ii] for ii in indices]]
                 primary_axis = indices[-1]
-
-                ic(name, indices, primary_axis)
 
                 unit = dataset.attrs.get("unit", None)
                 chunks = dataset.chunks

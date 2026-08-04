@@ -1,5 +1,3 @@
-import sparse
-import math
 from collections import defaultdict
 from pathlib import Path
 import json
@@ -77,9 +75,9 @@ class ManSource(AbstractDataSource):
             self.binning[k] = v
         self.man_data = man_data
         self.axes: dict[str, Axis] = dict(
-            x=Axis("x", 0, AxisType.EXACT, np.int16, "m"),
-            y=Axis("y", 1, AxisType.EXACT, np.int16, "m"),
-            mz=Axis("mz", 2, AxisType.EXACT, np.int16, "mz"),
+            x=Axis("x", 0, AxisType.EXACT, np.float32, "m"),
+            y=Axis("y", 1, AxisType.EXACT, np.float32, "m"),
+            mz=Axis("mz", 2, AxisType.EXACT, np.float32, "mz"),
         )
         for axis in supplimentary_axes:
             self.axes[axis.name] = axis
@@ -168,9 +166,10 @@ class ManSource(AbstractDataSource):
             raise UnknownAxisError(axis.name)
         if self.axes[axis.name].axis_type != AxisType.EXACT:
             raise UnknownAxisError(axis.name, AxisType.EXACT)
-        return (
+        return np.astype(
             np.arange(self.man_data.shape[axis.primary_axis])
-            * self.multipliers[axis.name]
+            * self.multipliers[axis.name],
+            axis.dtype,
         )
 
     def binned_axis_edges(self, axis: Axis) -> np.ndarray:
@@ -182,13 +181,14 @@ class ManSource(AbstractDataSource):
             raise UnknownAxisError(axis.name)
         if self.axes[axis.name].axis_type != AxisType.BINNED:
             raise UnknownAxisError(axis.name, AxisType.BINNED)
-        return (
+        return np.astype(
             np.arange(
                 0,
                 self.man_data.shape[axis.primary_axis] + self.binning[axis.name],
                 self.binning[axis.name],
             )
-            * self.multipliers[axis.name]
+            * self.multipliers[axis.name],
+            axis.dtype,
         )
 
     def output_accumulations(self) -> dict[str, tuple[str, ...]]:
@@ -229,15 +229,21 @@ class ManSource(AbstractDataSource):
         if self.any_sparse:
             mask = np.full((self.man_data.total_int.shape[0],), True)
 
-            pos = self.man_data.total_pos[:, :]
+            pos = np.array(
+                [
+                    (
+                        self.man_data.total_pos[self.axes[ax_name].primary_axis, :]
+                        / self.binning[ax_name]
+                    ).astype(np.uint16)
+                    for ax_name in self.axis_names
+                ]
+            )
             for ii in range(3):
-                axis_values = self.axis_values[ii][memory_chunk[ii]]
-                axis_name = self.axis_names[ii]
-                axis_pos = pos[ii, :] * self.multipliers[axis_name]
-                mask &= (axis_pos >= axis_values[0]) & (axis_pos <= axis_values[-1])
+                mask &= pos[ii, :] >= memory_chunk[ii].start
+                mask &= pos[ii, :] < memory_chunk[ii].stop
 
             values = {
-                ax.name: pos[ax.primary_axis] * self.multipliers[ax.name]
+                ax.name: self.axis_values[ax.primary_axis][pos[ax.primary_axis, :] + 1]
                 for ax in self.axes.values()
                 if ax.axis_type == AxisType.BINNED
             }

@@ -16,7 +16,6 @@ from .data import man_source
 
 import pytest
 
-from icecream import ic
 
 
 @pytest.fixture(scope="module")
@@ -33,12 +32,24 @@ def nx_file():
     filename.unlink()
 
 
-def check_data_correct(fle, man_data, max_chunk_item_count):
+def check_data_correct(
+    fle, man_data_source: man_source.ManSource, max_chunk_item_count
+):
     for data_name in ["images", "spectra"]:
         assert f"/entry/{data_name}/data/signal" in fle
         assert f"/entry/{data_name}/data/x" in fle
         assert f"/entry/{data_name}/data/y" in fle
         assert f"/entry/{data_name}/data/mz" in fle
+
+        assert (
+            fle[f"/entry/{data_name}/data/x"].dtype == man_data_source.axes["x"].dtype
+        )
+        assert (
+            fle[f"/entry/{data_name}/data/y"].dtype == man_data_source.axes["y"].dtype
+        )
+        assert (
+            fle[f"/entry/{data_name}/data/mz"].dtype == man_data_source.axes["mz"].dtype
+        )
 
         assert "x_indices" in fle[f"/entry/{data_name}/data/"].attrs
         assert "y_indices" in fle[f"/entry/{data_name}/data/"].attrs
@@ -49,22 +60,26 @@ def check_data_correct(fle, man_data, max_chunk_item_count):
         assert fle[f"/entry/{data_name}/data"].attrs["mz_indices"] == 2
         assert np.all(fle[f"/entry/{data_name}/data"].attrs["axes"] == ["x", "y", "mz"])
 
-        assert fle[f"/entry/{data_name}/data/signal"].shape == man_data.shape
+        assert (
+            fle[f"/entry/{data_name}/data/signal"].shape
+            == man_data_source.man_data.shape
+        )
 
         np.testing.assert_allclose(
-            fle[f"/entry/{data_name}/data/signal"][:, :, :], man_data.dense
+            fle[f"/entry/{data_name}/data/signal"][:, :, :],
+            man_data_source.man_data.dense,
         )
 
         actual_item_count = np.prod(fle[f"/entry/{data_name}/data/signal"].chunks)
         assert actual_item_count <= max_chunk_item_count
 
-    total_image = np.sum(man_data.dense, axis=2)
+    total_image = np.sum(man_data_source.man_data.dense, axis=2)
     assert fle["/entry/total_image/data/signal"].shape == (2, *total_image.shape)
     np.testing.assert_allclose(
         fle["/entry/total_image/data/signal"][1, :, :], total_image
     )
 
-    total_spectra = np.sum(man_data.dense, axis=(0, 1))
+    total_spectra = np.sum(man_data_source.man_data.dense, axis=(0, 1))
     assert fle["/entry/total_spectra/data/signal"].shape == (
         2,
         *total_spectra.shape,
@@ -75,7 +90,6 @@ def check_data_correct(fle, man_data, max_chunk_item_count):
 
 
 def test_dense_single_axis_single_chunk(nx_file, man_data):
-
     man_data_source = man_source.ManSource(man_data)
 
     process_args = data_convert.ProcessArgs(
@@ -90,7 +104,7 @@ def test_dense_single_axis_single_chunk(nx_file, man_data):
     assert nx_file.exists()
 
     with h5py.File(nx_file, "r") as fle:
-        check_data_correct(fle, man_data, process_args.chunk_max_byte_count / 2)
+        check_data_correct(fle, man_data_source, process_args.chunk_max_byte_count / 2)
 
 
 def test_dense_single_axis_multi_chunk(nx_file, man_data):
@@ -108,7 +122,7 @@ def test_dense_single_axis_multi_chunk(nx_file, man_data):
     assert nx_file.exists()
 
     with h5py.File(nx_file, "r") as fle:
-        check_data_correct(fle, man_data, process_args.chunk_max_byte_count / 2)
+        check_data_correct(fle, man_data_source, process_args.chunk_max_byte_count / 2)
 
 
 def get_dataset_total_and_used_chunks(fle, name):
@@ -139,7 +153,7 @@ def test_binned_single_axis_single_chunk(nx_file, man_data):
     assert nx_file.exists()
 
     with h5py.File(nx_file, "r") as fle:
-        check_data_correct(fle, man_data, process_args.chunk_max_byte_count / 2)
+        check_data_correct(fle, man_data_source, process_args.chunk_max_byte_count / 2)
 
         for data_name in ["images", "spectra"]:
             name = f"/entry/{data_name}/data/signal"
@@ -174,7 +188,7 @@ def test_binned_single_axis_multi_chunk(nx_file, man_data):
     assert nx_file.exists()
 
     with h5py.File(nx_file, "r") as fle:
-        check_data_correct(fle, man_data, process_args.chunk_max_byte_count / 2)
+        check_data_correct(fle, man_data_source, process_args.chunk_max_byte_count / 2)
 
         has_some_sparsity = False
         for data_name in ["images", "spectra"]:
@@ -326,9 +340,10 @@ def test_binned_multi_binned_axis_single_chunk(nx_file, man_data):
     man_data_source = man_source.ManSource(
         man_data,
         supplimentary_axes=[
-            Axis("mz", 2, AxisType.BINNED, np.int16, "mz"),
-            Axis("error", 2, AxisType.BINNED, np.int16, "%"),
+            Axis("mz", 2, AxisType.BINNED, np.float32, "mz"),
+            Axis("error", 2, AxisType.BINNED, np.float32, "%"),
         ],
+        multipliers=dict(mz=0.1, error=0.1),
     )
 
     process_args = data_convert.ProcessArgs(
@@ -350,6 +365,14 @@ def test_binned_multi_binned_axis_single_chunk(nx_file, man_data):
             assert f"/entry/{data_name}/data/mz" in fle
             assert f"/entry/{data_name}/data/error" in fle
 
+            data_part = fle[f"/entry/{data_name}/data/signal"]
+            np.testing.assert_allclose(data_part[:, :, :], man_data.dense[:, :, :])
+            for ii in range(4):
+                np.testing.assert_allclose(
+                    np.sum(data_part[:, :, 60 * ii : 60 * (ii + 1)], axis=2),
+                    np.sum(man_data.dense[:, :, 60 * ii : 60 * (ii + 1)], axis=2),
+                )
+
             assert f"/entry/{data_name}/data/mz_exact" in fle
             assert "mz_exact_indices" in fle[f"/entry/{data_name}/data/"].attrs
 
@@ -370,6 +393,116 @@ def test_binned_multi_binned_axis_single_chunk(nx_file, man_data):
             assert fle[f"/entry/{data_name}/data/"].attrs["error_indices"] == 2
 
             np.testing.assert_allclose(
+                fle[f"/entry/{data_name}/data/mz"], np.arange(0, 240) * 0.1 + 0.1
+            )
+            np.testing.assert_allclose(
+                fle[f"/entry/{data_name}/data/error"], np.arange(0, 240) * 0.1 + 0.1
+            )
+
+            np.testing.assert_allclose(
                 fle[f"/entry/{data_name}/data/mz_exact"][:, :, :],
                 fle[f"/entry/{data_name}/data/error_exact"][:, :, :],
+            )
+            mz_exact = fle[f"/entry/{data_name}/data/mz_exact"][:, :, :]
+            mz_exact_desired = np.tile(
+                fle[f"/entry/{data_name}/data/mz"],
+                (8, 8, 1),
+            )
+            mask = np.isnan(mz_exact)
+            mz_exact_desired[mask] = np.nan
+
+            np.testing.assert_allclose(mz_exact, mz_exact_desired)
+            assert (
+                fle[f"/entry/{data_name}/data/mz"].dtype
+                == fle[f"/entry/{data_name}/data/mz_exact"].dtype
+            )
+
+            assert "/entry/item_counts/data/signal" in fle
+            assert "/entry/item_counts/data/x" in fle
+            assert "/entry/item_counts/data/y" in fle
+            assert "/entry/item_counts/data/mz" in fle
+            assert "/entry/item_counts/data/mz_exact" not in fle
+            assert fle["/entry/item_counts/data/signal"].dtype == np.uint16
+
+
+def test_binned_multi_binned_axis_multi_chunk_with_mz_bin_2(nx_file, man_data):
+    man_data_source = man_source.ManSource(
+        man_data,
+        supplimentary_axes=[
+            Axis("mz", 2, AxisType.BINNED, np.float32, "mz"),
+            Axis("error", 2, AxisType.BINNED, np.float32, "%"),
+        ],
+        binning=dict(mz=2, error=2),
+        multipliers=dict(mz=0.1, error=0.1),
+    )
+
+    process_args = data_convert.ProcessArgs(
+        in_path=Path(__file__).parent / "data" / "Man1.txt",
+        out_path=nx_file,
+        chunk_max_byte_count=240 * 2,
+        memory_max_byte_count=1024 * 1024 * 1024,
+        data_source=man_data_source,
+    )
+    data_convert.process(process_args, {})
+
+    assert nx_file.exists()
+
+    with h5py.File(nx_file, "r") as fle:
+        for data_name in ["images", "spectra"]:
+            assert f"/entry/{data_name}/data/signal" in fle
+            assert f"/entry/{data_name}/data/x" in fle
+            assert f"/entry/{data_name}/data/y" in fle
+            assert f"/entry/{data_name}/data/mz" in fle
+            assert f"/entry/{data_name}/data/error" in fle
+
+            data_part = fle[f"/entry/{data_name}/data/signal"]
+            for ii in range(4):
+                np.testing.assert_allclose(
+                    np.sum(data_part[:, :, 30 * ii : 30 * (ii + 1)], axis=2),
+                    np.sum(man_data.dense[:, :, 60 * ii : 60 * (ii + 1)], axis=2),
+                )
+
+            assert f"/entry/{data_name}/data/mz_exact" in fle
+            assert "mz_exact_indices" in fle[f"/entry/{data_name}/data/"].attrs
+
+            assert f"/entry/{data_name}/data/error_exact" in fle
+            assert "error_exact_indices" in fle[f"/entry/{data_name}/data/"].attrs
+
+            assert "x_indices" in fle[f"/entry/{data_name}/data/"].attrs
+            assert "y_indices" in fle[f"/entry/{data_name}/data/"].attrs
+            assert "mz_indices" in fle[f"/entry/{data_name}/data/"].attrs
+            assert "error_indices" in fle[f"/entry/{data_name}/data/"].attrs
+
+            assert np.all(
+                fle[f"/entry/{data_name}/data"].attrs["axes"] == ["x", "y", "mz"],
+            )
+            assert fle[f"/entry/{data_name}/data/"].attrs["x_indices"] == 0
+            assert fle[f"/entry/{data_name}/data/"].attrs["y_indices"] == 1
+            assert fle[f"/entry/{data_name}/data/"].attrs["mz_indices"] == 2
+            assert fle[f"/entry/{data_name}/data/"].attrs["error_indices"] == 2
+
+            np.testing.assert_allclose(
+                fle[f"/entry/{data_name}/data/mz"], np.arange(0, 120) * 2 * 0.1 + 0.2
+            )
+            np.testing.assert_allclose(
+                fle[f"/entry/{data_name}/data/error"], np.arange(0, 120) * 2 * 0.1 + 0.2
+            )
+
+            np.testing.assert_allclose(
+                fle[f"/entry/{data_name}/data/mz_exact"][:, :, :],
+                fle[f"/entry/{data_name}/data/error_exact"][:, :, :],
+            )
+            mz_exact = fle[f"/entry/{data_name}/data/mz_exact"][:, :, :]
+            mz_exact_desired = np.tile(
+                fle[f"/entry/{data_name}/data/mz"],
+                (8, 8, 1),
+            )
+            mask = np.isnan(mz_exact)
+            mz_exact_desired[mask] = np.nan
+
+            np.testing.assert_allclose(mz_exact, mz_exact_desired)
+
+            assert (
+                fle[f"/entry/{data_name}/data/mz"].dtype
+                == fle[f"/entry/{data_name}/data/mz_exact"].dtype
             )

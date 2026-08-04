@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import NamedTuple, Sequence
 
 import numpy as np
 
@@ -53,7 +52,6 @@ def find_uniques(
 
     unique_mask = np.append(True, unique_mask)
 
-    # coords = coords[:, unique_mask]
     (unique_inds,) = np.nonzero(unique_mask)
     if count:
         counts = np.diff(unique_inds)
@@ -128,3 +126,7 @@ class MultiCOO:
         }
 
         return counts
+
+    def set_binned_indices(self, primary_axis, values, edges) -> None:
+        labels = np.searchsorted(edges[:-2], values)
+        self.coords[primary_axis, :] = labels
