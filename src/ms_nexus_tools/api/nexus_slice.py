@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: Apache-2.0
-from ms_nexus_tools.lib.utils import simplify_chunks
 import bisect
 import copy
 from enum import Enum
@@ -11,15 +10,16 @@ from pathlib import Path
 import itertools
 import logging
 
+import matplotlib.pyplot as plt
+
 import h5py
 import hdf5plugin
 from nexusformat.nexus import NeXusError, NXdata, NXsubentry
 import numpy as np
 import dask.array as da
 
-
-from datargs.args import no_arg_field
-from datargs import (
+from argsui.args import no_arg_field
+from argsui import (
     arg_field,
     ArgType,
     ConfigFileArgs,
@@ -30,7 +30,13 @@ from datargs import (
 from ..lib.nxs import NexusFile, NxAxis, NxAxes, create_field, FieldOptions
 from ..lib.chunker import count_chunks_to_cover
 from ..lib.bounds import Shape, Chunk
+from ..lib.image import plot_image
+from ..lib.spectrum import plot_spectrum
+from ..lib.utils import simplify_chunks
 
+from icecream import install as icecream_install
+
+icecream_install()
 logger = logging.getLogger(__name__)
 
 
@@ -162,6 +168,22 @@ class ProcessArgs(ConfigFileArgs, InteractiveArgs):
         default_factory=list,
         help="The slice to this axis of the group: --slice GROUP AXIS (centred CENTRE WIDTH | range LOWER UPPER | value VALUE | all)",
         metavar="GROUP AXIS slice-type VARS+",
+    )
+
+    plot_spectrum: bool = arg_field(
+        "--no-plot-spectrum",
+        "--no-plot-1d",
+        arg_type=ArgType.EXPLICIT_ONLY,
+        action="store_false",
+        help="Do not plot images for 1D views and summaries.",
+    )
+
+    plot_image: bool = arg_field(
+        "--no-plot-image",
+        "--no-plot-2d",
+        arg_type=ArgType.EXPLICIT_ONLY,
+        action="store_false",
+        help="Do not plot images for 2D views and summaries.",
     )
 
     field_options: FieldOptions = no_arg_field(
@@ -381,6 +403,10 @@ class GroupParams:
                 case SliceType.Value:
                     start_value = axis.slice_var1
                     start = bisect.bisect_left(values, start_value)
+                    if start == len(values):
+                        raise IndexError(
+                            f"The value {start_value} is out of bounds of {axis_name}."
+                        )
                     slc = slice(start, start + 1)
                 case _:
                     raise RuntimeError(f"Unknown slice type: {axis.slice_type}")
@@ -409,17 +435,15 @@ class GroupParams:
 
                 offset = 0
                 new_indices = []
-
                 for ii, action in enumerate(dimension_actions):
                     if action != ActionType.Leave:
                         offset += 1
                     if ii in indices:
                         new_indices.append(ii - offset)
-                indices = new_indices
 
                 dataset = fle[path][name]
                 values = dataset[*[chunk[ii] for ii in indices]]
-                primary_axis = indices[-1]
+                primary_axis = new_indices[-1]
 
                 unit = dataset.attrs.get("unit", None)
                 chunks = dataset.chunks
@@ -588,6 +612,9 @@ def process(args: ProcessArgs, config: dict[str, Any]) -> None:
                 signal_name = fle[min_path].attrs["signal"]
                 hdf_data = fle[min_path][signal_name]
                 chunked_data = da.from_array(hdf_data, chunks=hdf_data.chunks)[*chunk]
+                if 0 in chunked_data.shape:
+                    raise IndexError("The provided slices have resulted in zero data")
+                    chunked_data.reshape(tuple(max(1, ss) for ss in chunked_data.shape))
 
                 actions = [
                     params.axes[axis_name].action_type
@@ -655,10 +682,11 @@ def process(args: ProcessArgs, config: dict[str, Any]) -> None:
                                     chunks=simplify_chunks(loop_data.chunks),
                                     shuffle=args.field_options.shuffle,
                                     fillvalue=0,
+                                    name=signal_name,
                                 ),
                             ),
                         )
-                        loop_data.store(nxs.root[f"{name}/data/signal"])
+                        loop_data.store(nxs.root[f"{name}/data/{signal_name}"])
                         nxs.root[name].attrs["default"] = "data"
                         final_axes.add_to_group(nxs.root[f"{name}/data/"])
                 else:
@@ -681,8 +709,36 @@ def process(args: ProcessArgs, config: dict[str, Any]) -> None:
                             chunks=chunks,
                             shuffle=args.field_options.shuffle,
                             fillvalue=0,
+                            name=signal_name,
                         ),
                     )
-                    processes_data.store(nxs.root["data/signal"])
+                    processes_data.store(nxs.root[f"data/{signal_name}"])
                     final_axes.add_to_group(nxs.root["data/"])
                     nxs.root.attrs["default"] = "data"
+
+                    if params.group_type == GroupType.View:
+                        indices = tuple(ii for ii, s in enumerate(shape) if s > 1)
+                        new_shape = tuple(s for s in shape if s > 1)
+                        shaped_data = processes_data.reshape(new_shape)
+                        ndim = len(shaped_data.shape)
+                        if ndim == 2 and args.plot_image:
+                            fig, ax = plt.subplots()
+                            plot_image(
+                                ax,
+                                shaped_data.compute(),
+                                final_axes[indices[0]][0].field.nxdata,
+                                final_axes[indices[1]][0].field.nxdata,
+                            )
+                            ax.set_xlabel(final_axes[indices[0]][0].name)
+                            ax.set_ylabel(final_axes[indices[1]][0].name)
+                            fig.savefig(args.out_dir / f"{group}.2d.png")
+                        elif ndim == 1 and args.plot_spectrum:
+                            fig, ax = plt.subplots()
+                            plot_spectrum(
+                                ax,
+                                shaped_data,
+                                final_axes[indices[0]][0].field.nxdata,
+                            )
+                            ax.set_xlabel(final_axes[indices[0]][0].name)
+                            ax.set_ylabel(signal_name)
+                            fig.savefig(args.out_dir / f"{group}.1d.png")

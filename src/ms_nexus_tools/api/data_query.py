@@ -13,7 +13,7 @@ import numpy as np
 import scipy
 
 
-from datargs import (
+from argsui import (
     no_arg_field,
     arg_field,
     ArgType,

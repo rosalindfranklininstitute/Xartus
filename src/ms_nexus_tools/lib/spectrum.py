@@ -28,7 +28,7 @@ def plot_spectrum(
     ax: plt.Axes,
     counts: Number1D,
     values: Number1D,
-    spec_slices: list[Plottable[SpecSlice]],
+    spec_slices: list[Plottable[SpecSlice]] = [],
 ) -> None:
     ax.plot(values, counts)
 

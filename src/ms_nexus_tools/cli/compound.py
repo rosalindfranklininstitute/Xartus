@@ -4,14 +4,14 @@
 
 import argparse
 
-import datargs
+import argsui
 from ..api import compound as comp_api
 
 
 def compound() -> None:
     parser = argparse.ArgumentParser(prog="compound")
 
-    datargs.add_arguments(parser, comp_api.ProcessArgs)
+    argsui.add_arguments(parser, comp_api.ProcessArgs)
 
     args = parser.parse_args()
 

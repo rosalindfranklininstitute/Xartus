@@ -99,8 +99,8 @@ def plot_image(
             yy.ravel(),
             weights=image.ravel(),
             bins=[
-                np.arange(mnx - dx / 2, mxx + dx / 2, dx),
-                (np.arange(mny - dy / 2, mxy + dy / 2, dy)),
+                np.arange(mnx - dx / 2, mxx + dx / 2 + dx, dx),
+                np.arange(mny - dy / 2, mxy + dy / 2 + dx, dy),
             ],
         )
         im = ax.imshow(img.T, extent=(mnx, mxx, mny, mxy), **kwargs)

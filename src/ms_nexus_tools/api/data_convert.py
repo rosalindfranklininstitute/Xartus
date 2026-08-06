@@ -16,7 +16,7 @@ from tqdm import tqdm
 import hdf5plugin
 from nexusformat.nexus import NXsubentry, NXdata
 
-from datargs import (
+from argsui import (
     no_arg_field,
     arg_field,
     ArgType,

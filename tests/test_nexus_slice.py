@@ -1,14 +1,14 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: Apache-2.0
-
-
 from pathlib import Path
 
 from shutil import rmtree
 
 import numpy as np
 import h5py
+
+from PIL import Image as PILImage
 
 from ms_nexus_tools.api import nexus_slice, data_convert
 from ms_nexus_tools.lib.data_source import Axis, AxisType
@@ -47,6 +47,24 @@ def man_data_and_nexus():
     data_convert.process(process_args, {})
     yield man_data, filename
     filename.unlink()
+
+
+@pytest.fixture(scope="module")
+def man_images():
+    filenames = [
+        Path(__file__).parent / "data" / f"reference_man{ii}.2d.png"
+        for ii in range(1, 5)
+    ]
+    return [PILImage.open(filename) for filename in filenames]
+
+
+@pytest.fixture(scope="module")
+def hand_spectra():
+    filenames = [
+        Path(__file__).parent / "data" / f"reference_hand{ii}.1d.png"
+        for ii in range(1, 4)
+    ]
+    return [PILImage.open(filename) for filename in filenames]
 
 
 @pytest.fixture
@@ -88,8 +106,16 @@ def test_fully_specified(man_data_and_nexus, nx_dir):
             ["spectra", "y", "all"],
             ["spectra", "mz", "all"],
         ],
+        plot_image=False,
+        plot_spectrum=False,
     )
     nexus_slice.process(process_args, {})
+
+    man3_file = nx_dir / f"man3.1d.png"
+    assert not man3_file.exists()
+
+    spectra_file = nx_dir / f"spectra.1d.png"
+    assert not spectra_file.exists()
 
     out_file = nx_dir / "spectra.nxs"
     assert out_file.exists()
@@ -101,6 +127,7 @@ def test_fully_specified(man_data_and_nexus, nx_dir):
         assert "/entry/data/mz" in fle
         assert "/entry/data/error" in fle
         data = fle["/entry/data/signal"][:]
+        assert data.shape == (240,)
         np.testing.assert_allclose(
             data, np.sum(man_data_and_nexus[0].dense, axis=(0, 1))
         )
@@ -115,6 +142,7 @@ def test_fully_specified(man_data_and_nexus, nx_dir):
         assert "/entry/data/mz" not in fle
         assert "/entry/data/error" not in fle
         data = fle["/entry/data/signal"][:, :]
+        assert data.shape == (8, 8)
 
         np.testing.assert_allclose(
             data, np.sum(man_data_and_nexus[0].dense[:, :, 120:180], axis=2)
@@ -137,6 +165,8 @@ def test_using_defaults(man_data_and_nexus, nx_dir):
         slice=[
             ["man3", "mz", "range", str(12), str(18)],
         ],
+        plot_image=False,
+        plot_spectrum=False,
     )
     nexus_slice.process(process_args, {})
 
@@ -186,6 +216,8 @@ def test_error_on_missing(man_data_and_nexus, nx_dir):
         slice=[
             ["man3", "mz", "range", str(12), str(18)],
         ],
+        plot_image=False,
+        plot_spectrum=False,
     )
 
     process_args.default_group_type = GroupType.Error
@@ -226,6 +258,8 @@ def test_leave_and_slice(man_data_and_nexus, nx_dir):
             ["man3_centre", "mz", "centred", str(15), str(6)],
             ["man3_value", "mz", "value", str(15)],
         ],
+        plot_image=False,
+        plot_spectrum=False,
     )
     nexus_slice.process(process_args, {})
     out_file = nx_dir / "man_all.nxs"
@@ -308,6 +342,8 @@ def test_loop_and_slice(man_data_and_nexus, nx_dir):
             ["rows", "mz", "centred", str(15), str(6)],
             ["pixels", "x", "value", str(0.2)],
         ],
+        plot_image=False,
+        plot_spectrum=False,
     )
 
     nexus_slice.process(process_args, {})
@@ -361,6 +397,8 @@ def test_sum_and_slice(man_data_and_nexus, nx_dir):
             ["man3_value", "mz", "value", str(15)],
             ["man3_cross_value", "mz", "value", str(15)],
         ],
+        plot_image=False,
+        plot_spectrum=False,
     )
     nexus_slice.process(process_args, {})
     out_file = nx_dir / "man_all.nxs"
@@ -455,6 +493,8 @@ def test_multiaxis_off_default_slice(man_data_and_nexus, nx_dir):
         slice=[
             ["man3", "error", "range", str(120), str(180)],
         ],
+        plot_image=False,
+        plot_spectrum=False,
     )
     nexus_slice.process(process_args, {})
 
@@ -501,6 +541,8 @@ def test_complete_sum(man_data_and_nexus, nx_dir):
             ["all", "mz", "sum"],
         ],
         default_slice=["all"],
+        plot_image=False,
+        plot_spectrum=False,
     )
     nexus_slice.process(process_args, {})
     out_file = nx_dir / "all.nxs"
@@ -557,6 +599,8 @@ def test_binned_axis(man_data_and_nexus, nx_dir):
                 ["sliced", "y", "range", str(0.1), str(0.7)],
                 ["sliced", "mz", "range", str(12), str(18)],
             ],
+            plot_image=False,
+            plot_spectrum=False,
         )
         nexus_slice.process(nexus_args, {})
         out_file = nx_dir / "all.nxs"
@@ -594,11 +638,86 @@ def test_binned_axis(man_data_and_nexus, nx_dir):
         filename.unlink()
 
 
-@pytest.mark.skip(reason="I do not, yet, know how to test this.")
-def test_view_type(man_data_and_nexus, nx_dir):
+def test_view_2D_plot(man_data_and_nexus, nx_dir, man_images):
+    process_args = nexus_slice.ProcessArgs(
+        in_path=man_data_and_nexus[1],
+        out_dir=nx_dir,
+        default_group_type=GroupType.View,
+        default_paths=["/entry/images/data/", "/entry/spectra/data/"],
+        default_action=ActionType.Leave,
+        action=[
+            ["man1", "mz", "sum"],
+            ["man2", "mz", "sum"],
+            ["man2", "x", "leave"],
+            ["man3", "mz", "sum"],
+            ["man4", "mz", "sum"],
+        ],
+        default_slice=["all"],
+        slice=[
+            ["man1", "mz", "range", str(0), str(6)],
+            ["man2", "mz", "range", str(6), str(12)],
+            ["man2", "x", "all"],
+            ["man3", "mz", "range", str(12), str(18)],
+            ["man4", "mz", "range", str(18), str(24)],
+        ],
+        plot_image=True,
+        plot_spectrum=False,
+    )
+    nexus_slice.process(process_args, {})
+
+    for ii in range(4):
+        man_image_file = nx_dir / f"man{ii + 1}.2d.png"
+        assert man_image_file.exists()
+
+        man_image = np.array(PILImage.open(man_image_file))
+        np.testing.assert_allclose(man_image, man_images[ii])
+
+
+def test_view_1D_plot(man_data_and_nexus, nx_dir, hand_spectra):
+    process_args = nexus_slice.ProcessArgs(
+        in_path=man_data_and_nexus[1],
+        out_dir=nx_dir,
+        default_group_type=GroupType.View,
+        default_paths=["/entry/images/data/", "/entry/spectra/data/"],
+        default_action=ActionType.Leave,
+        action=[
+            ["hand2", "y", "leave"],
+            ["hand2", "mz", "leave"],
+            ["hand2", "x", "leave"],
+        ],
+        default_slice=["all"],
+        slice=[
+            ["hand1", "x", "value", str(0.1)],
+            ["hand1", "y", "value", str(0.5)],
+            ["hand2", "y", "value", str(0.4)],
+            ["hand2", "mz", "all"],
+            ["hand2", "x", "value", str(0.0)],
+            ["hand3", "x", "value", str(0.1)],
+            ["hand3", "y", "value", str(0.3)],
+        ],
+        plot_image=True,
+        plot_spectrum=True,
+    )
+    nexus_slice.process(process_args, {})
+
+    for ii in range(3):
+        hand_image_file = nx_dir / f"hand{ii + 1}.1d.png"
+        assert hand_image_file.exists()
+
+        hand_image = np.array(PILImage.open(hand_image_file))
+        np.testing.assert_allclose(hand_image, hand_spectra[ii])
+
+
+@pytest.mark.skip(reason="Not yet implemented")
+def test_view_loop_2D_plot(man_data_and_nexus, nx_dir, hand_spectra):
     pass
 
 
-@pytest.mark.skip(reason="I do not, yet, know how to test this.")
+@pytest.mark.skip(reason="Not yet implemented")
+def test_view_loop_1D_plot(man_data_and_nexus, nx_dir, hand_spectra):
+    pass
+
+
+@pytest.mark.skip(reason="Not yet implemented")
 def test_summary_type(man_data_and_nexus, nx_dir):
     pass

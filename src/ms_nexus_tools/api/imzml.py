@@ -13,7 +13,7 @@ from pyimzml.compression import NoCompression
 from tqdm import tqdm
 import numpy as np
 
-from datargs import arg_field, FilePathType, ConfigFileArgs, InteractiveArgs, ArgType
+from argsui import arg_field, FilePathType, ConfigFileArgs, InteractiveArgs, ArgType
 
 from ..lib.nxs import NexusFile
 

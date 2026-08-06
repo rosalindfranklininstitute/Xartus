@@ -7,7 +7,7 @@ import argparse
 
 import numpy as np
 
-from datargs.extra_types import FilePathType
+from argsui.extra_types import FilePathType
 
 from ..lib.chunker import count_chunks_to_cover
 from ..lib.utils import format_bytes

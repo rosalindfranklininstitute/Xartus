@@ -9,7 +9,7 @@ from enum import Enum
 
 import numpy as np
 
-from datargs import arg_field
+from argsui import arg_field
 
 
 def _cycle(cycle: int | None, length: int) -> int:

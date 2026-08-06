@@ -4,7 +4,7 @@
 
 from pathlib import Path
 
-import datargs
+import argsui
 from ..api import data_query
 from ..lib.nxs_query_source import NxsQuerySource
 
@@ -21,7 +21,7 @@ def query() -> None:
     data_query.process(process_args, partial_args.config)
 
 
-class NxsFileTypes(datargs.FileDetails):
+class NxsFileTypes(argsui.FileDetails):
     def file_extension(self) -> str:
         return ".nxs"
 
@@ -33,7 +33,7 @@ class NxsFileTypes(datargs.FileDetails):
 
 
 def bulk_query() -> None:
-    datargs.process_bulk(
+    argsui.process_bulk(
         "query",
         data_query.ProcessArgs,
         data_query.process,

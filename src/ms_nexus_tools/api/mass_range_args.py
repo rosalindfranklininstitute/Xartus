@@ -17,7 +17,7 @@ from ..lib.mz_filter import MassRangeTotalImage, Accumulator
 from ..lib.normalisation import norm, Norm
 from . import compound as nxcomp
 
-from datargs import arg_field
+from argsui import arg_field
 
 from .image_and_spectrum_plot import (
     AxCommand,
