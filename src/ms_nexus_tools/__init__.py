@@ -5,6 +5,5 @@
 from . import lib as lib
 from . import api as api
 from .cli.inspect_h5 import inspect
-from .cli.query import query, bulk_query
 from .cli.nx_data_stats import print_nx_data_stats
 from .cli.nexus_slice import nxslice
