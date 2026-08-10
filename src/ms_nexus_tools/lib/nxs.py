@@ -12,7 +12,7 @@ import numpy.typing as npt
 from .bounds import Shape, Chunk
 from .contained_bounds import ContainedBounds
 from .chunker import Chunker
-from .mz_filter import Accumulator
+from .normalisation import Accumulator
 
 from nexusformat.nexus import NXentry, NXfield, NXdata, nxload
 from nexusformat.nexus.tree import (

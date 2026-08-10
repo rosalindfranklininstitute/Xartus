@@ -11,7 +11,6 @@ import numpy as np
 
 from .bounds import Chunk, Shape
 from .exceptions import UnsupportedDataError
-from .mz_filter import MzFilter
 from .normalisation import Accumulator
 
 
@@ -43,7 +42,7 @@ class AbstractQuerySource(AbstractContextManager):
         layer: int,
         bins: list[int],
         xy: list[tuple[int, int]],
-        totals: list[MzFilter],
+        totals: list,
         chunk: Chunk,
     ) -> None:
         pass

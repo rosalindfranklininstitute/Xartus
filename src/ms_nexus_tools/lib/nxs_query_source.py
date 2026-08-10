@@ -12,7 +12,7 @@ from tqdm import tqdm
 from .bounds import Shape, Chunk
 from .nxs import NexusFile
 from .query_source import AbstractQuerySource
-from .mz_filter import MzFilter, Accumulator
+from .normalisation import Accumulator
 from .chunker import count_chunks_to_cover
 
 
@@ -49,7 +49,7 @@ class NxsQuerySource(AbstractQuerySource):
         layer: int,
         bins: list[int],
         xy: list[tuple[int, int]],
-        totals: list[MzFilter],
+        totals: list,
         chunk: Chunk,
     ) -> None:
         spectra_chunking = self.nx_file.root.spectra.data.signal.chunks
