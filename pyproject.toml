@@ -35,7 +35,8 @@ dev = [
     "hypothesis>=6.151.7",
     "snakeviz>=2.2.2",
     "pillow>=12.1.1",
-    "nexus_pixel_man_test_data"
+    "nexus_pixel_man_test_data",
+    "pytest-local-badge>=1.3.1",
 ]
 
 [project.scripts]
@@ -74,7 +75,14 @@ ignore=["C408", "S311", "PTH123", "NPY002", "D203", "D205", "D212", "B006", "ARG
 
 [tool.pytest]
 testpaths = ["./tests", "./src/"]
-addopts = ["--doctest-modules", "--cov=./src/", "--cov-report=html", "--cov-branch"]
+addopts = [
+    "--doctest-modules", 
+    "--cov=./src/", 
+    "--cov-report=html", 
+    "--cov-branch",
+    "--local-badge-output-dir=badges",
+    "--local-badge-package=ms-nexus-tools",
+]
 
 [tool.line_profiler.kernprof]
 line-by-line = true

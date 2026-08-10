@@ -180,6 +180,11 @@ def slice_from_values(start: Number, stop: Number, values: Number1D) -> slice:
 
 
 class NotTqdm:
+    """
+    A small utility to provide the same, high level api, but without doing any thing.
+    Note that this may be made, somewhat, redundant with the argument: disable=True.
+    """
+
     def __init__(self, iterator: Iterable | None = None, **kwargs):
         self.iterator = iterator
 
@@ -200,6 +205,10 @@ class NotTqdm:
 
 
 def json_add(filename, *keys, value) -> None:
+    """
+    Adds the given value to the json file.
+    Overriding one that exists.
+    """
     old_data = {}
     if filename.exists():
         with open(filename, "r") as fd:
@@ -264,6 +273,12 @@ def reduce_shape(shape: Shape, axis=None) -> Shape:
 
 
 class FileGuard(AbstractContextManager):
+    """
+    This context takes in a collection and checks their state after the block runs.
+    It can delete files if a process fails (to avoid leaving poluting temporary files on process failures.)
+    It can check that files exist after a process (asserting a know outcome)
+    """
+
     def __init__(
         self,
         *paths: Path,

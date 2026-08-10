@@ -14,13 +14,11 @@ from pathlib import Path
 
 @contextmanager
 def time_this(name: str) -> GeneratorType[None]:
-    # Code to acquire resource, e.g.:
     now = time.monotonic()
     print(f"{name} began.")
     try:
         yield
     finally:
-        # Code to release resource, e.g.:
         print(f"{name} completed in {time.monotonic() - now}s")
 
 

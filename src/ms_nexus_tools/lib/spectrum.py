@@ -1,6 +1,11 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: Apache-2.0
+"""
+Utilities for drawing spectrum from 1D data.
+Here are utilities to mark annototations.
+"""
+
 from dataclasses import dataclass
 
 import numpy as np
@@ -14,6 +19,10 @@ from .plotting import Plottable
 
 @dataclass
 class SpecSlice:
+    """
+    A simple slice of the 1D data.
+    """
+
     start: float
     stop: float
 
@@ -30,6 +39,10 @@ def plot_spectrum(
     values: Number1D,
     spec_slices: list[Plottable[SpecSlice]] = [],
 ) -> None:
+    """
+    This is a wrapper around plt.plot, which allows annotations.
+    """
+
     ax.plot(values, counts)
 
     for spec_slice in spec_slices:

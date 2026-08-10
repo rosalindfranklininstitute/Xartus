@@ -1,13 +1,19 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: Apache-2.0
+
 from ms_nexus_tools.lib.dtypes import Float1D32
 from dataclasses import dataclass, field
 import numpy as np
 
 
 @dataclass
-class SparseSampling:
+class MultiLinspace:
+    """
+    It allows spaning a space, by presenting a multi-linear function.
+    This combines percentiles and linspace.
+    """
+
     downsample_count: int = 10
     area_positions: Float1D32 = field(default_factory=lambda: np.array([15, 85, 100]))
     area_volumes: Float1D32 = field(default_factory=lambda: np.array([5, 90, 5]))

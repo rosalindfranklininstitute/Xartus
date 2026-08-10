@@ -1,6 +1,10 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: Apache-2.0
+"""
+Utilities for drawing images from 2D data.
+Here are utilities to mark annotations.
+"""
 
 from typing import Any
 from enum import Enum
@@ -47,6 +51,10 @@ def adjust_origin(
 
 @dataclass
 class XYRectangle:
+    """
+    Represents a 2D slice of data.
+    """
+
     x_start: float
     x_stop: float
     y_start: float
@@ -75,6 +83,11 @@ def plot_image(
     diff_selector=np.median,
     **kwargs,
 ) -> tuple[Any, tuple[Number, Number]]:
+    """
+    This is like plt.imshow, except that it will correctly
+    plot images where the x- and y-values are not uniformly distributed.
+
+    """
     im_min, im_max = np.percentile(image, [0, 100])
     if x_values is None and y_values is not None:
         x_values = np.arange(image.shape[0])
