@@ -485,6 +485,7 @@ dependencies = [
 dev = [
     { name = "hypothesis" },
     { name = "line-profiler" },
+    { name = "nexus-pixel-man-test-data" },
     { name = "pillow" },
     { name = "pytest" },
     { name = "pytest-autoprofile" },
@@ -513,12 +514,35 @@ requires-dist = [
 dev = [
     { name = "hypothesis", specifier = ">=6.151.7" },
     { name = "line-profiler", specifier = ">=5.0.1" },
+    { name = "nexus-pixel-man-test-data", editable = "../nexus_pixel_man_test_data" },
     { name = "pillow", specifier = ">=12.1.1" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-autoprofile", specifier = ">=0.19.0" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "snakeviz", specifier = ">=2.2.2" },
 ]
+
+[[package]]
+name = "nexus-pixel-man-test-data"
+version = "0.1.0"
+source = { editable = "../nexus_pixel_man_test_data" }
+dependencies = [
+    { name = "argsui" },
+    { name = "ms-nexus-tools" },
+    { name = "numpy" },
+    { name = "pyimzml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "argsui", editable = "../argsui" },
+    { name = "ms-nexus-tools", editable = "." },
+    { name = "numpy", specifier = ">=2.4.6" },
+    { name = "pyimzml", editable = "../pyimzML" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "line-profiler", specifier = ">=5.0.2" }]
 
 [[package]]
 name = "nexusformat"

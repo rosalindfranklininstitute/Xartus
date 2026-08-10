@@ -18,15 +18,21 @@ from ms_nexus_tools.api.nexus_slice import (
     MissingArgumentError,
 )
 
-from .data import man_source
+from nexus_pixel_man_test_data import Man2DDataSource, ManData, data_files
+
 
 import pytest
 
 
 @pytest.fixture(scope="module")
-def man_data_and_nexus():
-    man_data = man_source.ManData()
-    man_data_source = man_source.ManSource(
+def man_file():
+    return data_files()["man1"]
+
+
+@pytest.fixture(scope="module")
+def man_data_and_nexus(man_file):
+    man_data = ManData()
+    man_data_source = Man2DDataSource(
         man_data,
         supplimentary_axes=[
             Axis("time", 0, AxisType.EXACT, np.float32, "s"),
@@ -37,8 +43,9 @@ def man_data_and_nexus():
     filename = Path(__file__).parent / "man.nxs"
     if filename.exists():
         filename.unlink()
+
     process_args = data_convert.ProcessArgs(
-        in_path=Path(__file__).parent / "data" / "Man1.txt",
+        in_path=man_file,
         out_path=filename,
         chunk_max_byte_count=1024 * 1024,
         memory_max_byte_count=1024 * 1024 * 1024,
@@ -559,11 +566,11 @@ def test_complete_sum(man_data_and_nexus, nx_dir):
         np.testing.assert_allclose(data, np.sum(man_data_and_nexus[0].dense))
 
 
-def test_binned_axis(man_data_and_nexus, nx_dir):
+def test_binned_axis(man_data_and_nexus, nx_dir, man_file):
     filename = Path(__file__).parent / "man_binned.nxs"
     try:
-        man_data = man_source.ManData()
-        man_data_source = man_source.ManSource(
+        man_data = ManData()
+        man_data_source = Man2DDataSource(
             man_data,
             supplimentary_axes=[
                 Axis("mz", 2, AxisType.BINNED, np.int16, "mz"),
@@ -574,7 +581,7 @@ def test_binned_axis(man_data_and_nexus, nx_dir):
         if filename.exists():
             filename.unlink()
         process_args = data_convert.ProcessArgs(
-            in_path=Path(__file__).parent / "data" / "Man1.txt",
+            in_path=man_file,
             out_path=filename,
             chunk_max_byte_count=1024 * 1024,
             memory_max_byte_count=1024 * 1024 * 1024,

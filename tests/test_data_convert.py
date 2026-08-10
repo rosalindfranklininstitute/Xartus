@@ -14,7 +14,7 @@ from ms_nexus_tools.lib.chunker import count_chunks_to_cover
 from ms_nexus_tools.api import data_convert
 from ms_nexus_tools.lib.data_source import Axis, AxisType
 
-from .data import man_source
+from nexus_pixel_man_test_data import Man2DDataSource, ManData, data_files
 
 import pytest
 
@@ -96,7 +96,7 @@ class Parameters:
 
 @pytest.fixture(scope="module")
 def man_data():
-    return man_source.ManData()
+    return ManData()
 
 
 @pytest.fixture
@@ -106,6 +106,11 @@ def nx_file():
         filename.unlink()
     yield filename
     filename.unlink()
+
+
+@pytest.fixture
+def man_file():
+    return data_files()["man1"]
 
 
 def get_dataset_total_and_used_chunks(fle, name):
@@ -119,7 +124,7 @@ def get_dataset_total_and_used_chunks(fle, name):
 
 
 def check_basic_axis_correct(
-    fle, man_data_source: man_source.ManSource, max_chunk_item_count
+    fle, man_data_source: Man2DDataSource, max_chunk_item_count
 ):
     for data_name in ["images", "spectra"]:
         assert f"/entry/{data_name}/data/signal" in fle
@@ -138,7 +143,7 @@ def check_basic_axis_correct(
         assert actual_item_count <= max_chunk_item_count
 
 
-def check_dense_corret(fle, man_data_source: man_source.ManSource):
+def check_dense_corret(fle, man_data_source: Man2DDataSource):
     for data_name in ["images", "spectra"]:
         assert f"/entry/{data_name}/data/signal" in fle
         for axis in man_data_source.axes.values():
@@ -177,7 +182,7 @@ def check_dense_corret(fle, man_data_source: man_source.ManSource):
 
 def check_binned_correct(
     fle,
-    man_data_source: man_source.ManSource,
+    man_data_source: Man2DDataSource,
     max_count_per_bin,
     should_be_sparse,
 ):
@@ -270,11 +275,11 @@ dense_single_axis_params = Parameters(chunks=True)
 @pytest.mark.parametrize(
     dense_single_axis_params.args(), dense_single_axis_params.params()
 )
-def test_dense_single_axis(nx_file, man_data, chunk_max_byte_count):
-    man_data_source = man_source.ManSource(man_data)
+def test_dense_single_axis(nx_file, man_file, man_data, chunk_max_byte_count):
+    man_data_source = Man2DDataSource(man_data)
 
     process_args = data_convert.ProcessArgs(
-        in_path=Path(__file__).parent / "data" / "Man1.txt",
+        in_path=man_file,
         out_path=nx_file,
         chunk_max_byte_count=chunk_max_byte_count,
         memory_max_byte_count=1024 * 1024 * 1024,
@@ -291,8 +296,8 @@ def test_dense_single_axis(nx_file, man_data, chunk_max_byte_count):
         check_dense_corret(fle, man_data_source)
 
 
-def test_dense_multi_axis_single_chunk(nx_file, man_data):
-    man_data_source = man_source.ManSource(
+def test_dense_multi_axis_single_chunk(nx_file, man_file, man_data):
+    man_data_source = Man2DDataSource(
         man_data,
         supplimentary_axes=[
             Axis("time", 0, AxisType.EXACT, np.int16, "s"),
@@ -301,7 +306,7 @@ def test_dense_multi_axis_single_chunk(nx_file, man_data):
     )
 
     process_args = data_convert.ProcessArgs(
-        in_path=Path(__file__).parent / "data" / "Man1.txt",
+        in_path=man_file,
         out_path=nx_file,
         chunk_max_byte_count=1024 * 1024,
         memory_max_byte_count=1024 * 1024 * 1024,
@@ -318,8 +323,8 @@ def test_dense_multi_axis_single_chunk(nx_file, man_data):
         check_dense_corret(fle, man_data_source)
 
 
-def test_all_dimensions_binned(nx_file, man_data):
-    man_data_source = man_source.ManSource(
+def test_all_dimensions_binned(nx_file, man_file, man_data):
+    man_data_source = Man2DDataSource(
         man_data,
         supplimentary_axes=[
             Axis("x", 0, AxisType.BINNED, np.float32, "m"),
@@ -331,7 +336,7 @@ def test_all_dimensions_binned(nx_file, man_data):
     )
 
     process_args = data_convert.ProcessArgs(
-        in_path=Path(__file__).parent / "data" / "Man1.txt",
+        in_path=man_file,
         out_path=nx_file,
         chunk_max_byte_count=1024 * 1024,
         memory_max_byte_count=1024 * 1024 * 1024,
@@ -364,14 +369,14 @@ def test_all_dimensions_binned(nx_file, man_data):
         assert np.max(fle["/entry/item_counts/data/signal"][...]) == 8
 
 
-def test_sparse_all_exact(nx_file, man_data):
-    man_data_source = man_source.ManSource(
+def test_sparse_all_exact(nx_file, man_file, man_data):
+    man_data_source = Man2DDataSource(
         man_data,
         force_sparse=True,
     )
 
     process_args = data_convert.ProcessArgs(
-        in_path=Path(__file__).parent / "data" / "Man1.txt",
+        in_path=man_file,
         out_path=nx_file,
         chunk_max_byte_count=240 * 2,
         memory_max_byte_count=1024 * 1024 * 1024,
@@ -399,6 +404,7 @@ binned_params = Parameters(chunks=True, memory=True, bins=True, dtypes=True, mul
 @pytest.mark.parametrize(binned_params.args(), binned_params.params())
 def test_binned(
     nx_file,
+    man_file,
     man_data,
     chunk_max_byte_count,
     memory_max_byte_count,
@@ -406,7 +412,7 @@ def test_binned(
     mz_dtype,
     mult,
 ):
-    man_data_source = man_source.ManSource(
+    man_data_source = Man2DDataSource(
         man_data,
         supplimentary_axes=[Axis("mz", 2, AxisType.BINNED, mz_dtype, "mz")],
         binning={"mz": mz_binning},
@@ -414,7 +420,7 @@ def test_binned(
     )
 
     process_args = data_convert.ProcessArgs(
-        in_path=Path(__file__).parent / "data" / "Man1.txt",
+        in_path=man_file,
         out_path=nx_file,
         chunk_max_byte_count=chunk_max_byte_count,
         memory_max_byte_count=memory_max_byte_count,
@@ -438,8 +444,8 @@ def test_binned(
         )
 
 
-def test_binned_multi_continuous_axis_single_chunk(nx_file, man_data):
-    man_data_source = man_source.ManSource(
+def test_binned_multi_continuous_axis_single_chunk(nx_file, man_file, man_data):
+    man_data_source = Man2DDataSource(
         man_data,
         supplimentary_axes=[
             Axis("mz", 2, AxisType.BINNED, np.int16, "s"),
@@ -448,7 +454,7 @@ def test_binned_multi_continuous_axis_single_chunk(nx_file, man_data):
     )
 
     process_args = data_convert.ProcessArgs(
-        in_path=Path(__file__).parent / "data" / "Man1.txt",
+        in_path=man_file,
         out_path=nx_file,
         chunk_max_byte_count=1024 * 1024,
         memory_max_byte_count=1024 * 1024 * 1024,
@@ -479,9 +485,9 @@ binned_multi_axis_params = Parameters(chunks=True, bins=True, dtypes=True, mult=
     binned_multi_axis_params.args(), binned_multi_axis_params.params()
 )
 def test_binned_multi_axis(
-    nx_file, man_data, chunk_max_byte_count, mz_binning, mz_dtype, mult
+    nx_file, man_file, man_data, chunk_max_byte_count, mz_binning, mz_dtype, mult
 ):
-    man_data_source = man_source.ManSource(
+    man_data_source = Man2DDataSource(
         man_data,
         supplimentary_axes=[
             Axis("mz", 2, AxisType.BINNED, mz_dtype, "mz"),
@@ -492,7 +498,7 @@ def test_binned_multi_axis(
     )
 
     process_args = data_convert.ProcessArgs(
-        in_path=Path(__file__).parent / "data" / "Man1.txt",
+        in_path=man_file,
         out_path=nx_file,
         chunk_max_byte_count=chunk_max_byte_count,
         memory_max_byte_count=1024 * 1024 * 1024,
