@@ -20,6 +20,7 @@ dependencies = [
     "pyside6>=6.10.2",
     "scipy>=1.17.0",
     "sparse>=0.18.0",
+    "numpy>=2.4.6",
     "tqdm>=4.67.3",
 ]
 license = "Apache-2.0"
@@ -52,6 +53,10 @@ nxslice = "ms_nexus_tools:nxslice"
 requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
 
+[tool.uv.sources]
+argsui = { path = "../argsui", editable = true }
+pyimzml = { path = "../pyimzML", editable = true }
+
 [tool.ruff]
 indent-width=4
 
@@ -81,8 +86,4 @@ extend-exclude=["elements.py", "SIS_20260218_Elements_and_Isotopes.csv"]
 
 [tool.ty.analysis]
 allowed-unresolved-imports = ["nexusformat.nexus.tree.NXparameters" ,"nexusformat.nexus.tree.NXinstrument"]
-
-[tool.uv.sources]
-argsui = { path = "../argsui", editable = true }
-pyimzml = { path = "../pyimzML", editable = true }
 
