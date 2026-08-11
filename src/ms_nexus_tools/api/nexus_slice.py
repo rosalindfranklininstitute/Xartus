@@ -636,7 +636,7 @@ def process(args: ProcessArgs, config: dict[str, Any]) -> None:
                     axes = tuple(
                         [ii for ii, act in enumerate(actions) if act == ActionType.Sum]
                     )
-                    processes_data = da.max(chunked_data, acis=axes)
+                    processes_data = da.max(chunked_data, axis=axes)
                 else:
                     processes_data = chunked_data
 
