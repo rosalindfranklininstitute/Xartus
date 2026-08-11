@@ -42,7 +42,6 @@ def plot_spectrum(
     """
     This is a wrapper around plt.plot, which allows annotations.
     """
-
     ax.plot(values, counts)
 
     for spec_slice in spec_slices:

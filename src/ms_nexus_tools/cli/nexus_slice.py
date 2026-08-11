@@ -12,3 +12,5 @@ def nxslice() -> None:
         exclude=["config"],
         args=partial_args.remaining_args,
     )
+
+    nexus_slice.process(process_args, {})

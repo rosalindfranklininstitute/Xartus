@@ -118,10 +118,10 @@ def test_fully_specified(man_data_and_nexus, nx_dir):
     )
     nexus_slice.process(process_args, {})
 
-    man3_file = nx_dir / f"man3.1d.png"
+    man3_file = nx_dir / "man3.1d.png"
     assert not man3_file.exists()
 
-    spectra_file = nx_dir / f"spectra.1d.png"
+    spectra_file = nx_dir / "spectra.1d.png"
     assert not spectra_file.exists()
 
     out_file = nx_dir / "spectra.nxs"
@@ -645,7 +645,7 @@ def test_binned_axis(man_data_and_nexus, nx_dir, man_file):
         filename.unlink()
 
 
-def test_view_2D_plot(man_data_and_nexus, nx_dir, man_images):
+def test_view_2d_plot(man_data_and_nexus, nx_dir, man_images):
     process_args = nexus_slice.ProcessArgs(
         in_path=man_data_and_nexus[1],
         out_dir=nx_dir,
@@ -680,7 +680,7 @@ def test_view_2D_plot(man_data_and_nexus, nx_dir, man_images):
         np.testing.assert_allclose(man_image, man_images[ii])
 
 
-def test_view_1D_plot(man_data_and_nexus, nx_dir, hand_spectra):
+def test_view_1d_plot(man_data_and_nexus, nx_dir, hand_spectra):
     process_args = nexus_slice.ProcessArgs(
         in_path=man_data_and_nexus[1],
         out_dir=nx_dir,
@@ -716,12 +716,12 @@ def test_view_1D_plot(man_data_and_nexus, nx_dir, hand_spectra):
 
 
 @pytest.mark.skip(reason="Not yet implemented")
-def test_view_loop_2D_plot(man_data_and_nexus, nx_dir, hand_spectra):
+def test_view_loop_2d_plot(man_data_and_nexus, nx_dir, hand_spectra):
     pass
 
 
 @pytest.mark.skip(reason="Not yet implemented")
-def test_view_loop_1D_plot(man_data_and_nexus, nx_dir, hand_spectra):
+def test_view_loop_1d_plot(man_data_and_nexus, nx_dir, hand_spectra):
     pass
 
 
