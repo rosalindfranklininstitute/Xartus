@@ -143,7 +143,7 @@ def check_basic_axis_correct(
         assert actual_item_count <= max_chunk_item_count
 
 
-def check_dense_corret(fle, man_data_source: Man2DDataSource):
+def check_dense_correct(fle, man_data_source: Man2DDataSource):
     for data_name in ["images", "spectra"]:
         assert f"/entry/{data_name}/data/signal" in fle
         for axis in man_data_source.axes.values():
@@ -240,17 +240,17 @@ def check_binned_correct(
 
     total_spectra = fle["/entry/total_spectra/data/signal"]
     for ii in range(4):
-        fle_slice = total_spectra[
+        file_slice = total_spectra[
             :,
             (60 // max_count_per_bin) * ii : (60 // max_count_per_bin) * (ii + 1),
         ]
         data_slice = man_data_source.man_data.dense[:, :, 60 * ii : 60 * (ii + 1)]
         np.testing.assert_allclose(
-            np.sum(fle_slice[1, :]),
+            np.sum(file_slice[1, :]),
             np.sum(data_slice),
         )
         np.testing.assert_allclose(
-            np.max(fle_slice[0, :]),
+            np.max(file_slice[0, :]),
             np.max(data_slice),
         )
 
@@ -293,13 +293,13 @@ def test_dense_single_axis(nx_file, man_file, man_data, chunk_max_byte_count):
         check_basic_axis_correct(
             fle, man_data_source, process_args.chunk_max_byte_count / 2
         )
-        check_dense_corret(fle, man_data_source)
+        check_dense_correct(fle, man_data_source)
 
 
 def test_dense_multi_axis_single_chunk(nx_file, man_file, man_data):
     man_data_source = Man2DDataSource(
         man_data,
-        supplimentary_axes=[
+        supplementary_axes=[
             Axis("time", 0, AxisType.EXACT, np.int16, "s"),
             Axis("error", 2, AxisType.EXACT, np.int16, ""),
         ],
@@ -320,13 +320,13 @@ def test_dense_multi_axis_single_chunk(nx_file, man_file, man_data):
         check_basic_axis_correct(
             fle, man_data_source, process_args.chunk_max_byte_count / 2
         )
-        check_dense_corret(fle, man_data_source)
+        check_dense_correct(fle, man_data_source)
 
 
 def test_all_dimensions_binned(nx_file, man_file, man_data):
     man_data_source = Man2DDataSource(
         man_data,
-        supplimentary_axes=[
+        supplementary_axes=[
             Axis("x", 0, AxisType.BINNED, np.float32, "m"),
             Axis("y", 1, AxisType.BINNED, np.float32, "m"),
             Axis("mz", 2, AxisType.BINNED, np.float32, "m"),
@@ -390,7 +390,7 @@ def test_sparse_all_exact(nx_file, man_file, man_data):
         check_basic_axis_correct(
             fle, man_data_source, process_args.chunk_max_byte_count / 2
         )
-        check_dense_corret(
+        check_dense_correct(
             fle,
             man_data_source,
         )
@@ -414,7 +414,7 @@ def test_binned(
 ):
     man_data_source = Man2DDataSource(
         man_data,
-        supplimentary_axes=[Axis("mz", 2, AxisType.BINNED, mz_dtype, "mz")],
+        supplementary_axes=[Axis("mz", 2, AxisType.BINNED, mz_dtype, "mz")],
         binning={"mz": mz_binning},
         multipliers={"mz": mult},
     )
@@ -447,7 +447,7 @@ def test_binned(
 def test_binned_multi_continuous_axis_single_chunk(nx_file, man_file, man_data):
     man_data_source = Man2DDataSource(
         man_data,
-        supplimentary_axes=[
+        supplementary_axes=[
             Axis("mz", 2, AxisType.BINNED, np.int16, "s"),
             Axis("time", 0, AxisType.EXACT, np.int16, "s"),
         ],
@@ -489,7 +489,7 @@ def test_binned_multi_axis(
 ):
     man_data_source = Man2DDataSource(
         man_data,
-        supplimentary_axes=[
+        supplementary_axes=[
             Axis("mz", 2, AxisType.BINNED, mz_dtype, "mz"),
             Axis("error", 2, AxisType.BINNED, np.float32, "%"),
         ],

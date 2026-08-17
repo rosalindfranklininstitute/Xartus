@@ -8,7 +8,7 @@ import numpy as np
 from ms_nexus_tools.lib.chunker import Chunker
 
 
-def test_itmes_overflow():
+def test_items_overflow():
 
     chunker = Chunker.from_max_item_count(
         data_shape=(100, 100, 100),
@@ -47,7 +47,7 @@ def test_itmes_overflow():
     assert chunker.chunk_count == (100, 50, 1)
 
 
-def test_itmes_matched_priorities():
+def test_items_matched_priorities():
 
     chunker = Chunker.from_max_item_count(
         data_shape=(100, 100, 100),
@@ -86,7 +86,7 @@ def test_itmes_matched_priorities():
     assert chunker.chunk_count == (20, 20, 20)
 
 
-def test_itmes_min_chunk_count():
+def test_items_min_chunk_count():
 
     chunker = Chunker.from_max_item_count(
         data_shape=(100, 100, 100),

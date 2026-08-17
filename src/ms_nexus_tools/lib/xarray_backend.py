@@ -1,7 +1,6 @@
 from pathlib import Path
 from ms_nexus_tools.lib.exceptions import InvalidEntryError
 from typing import Any, Iterable, cast
-import os
 
 import dask.array as da
 import h5py
@@ -32,7 +31,6 @@ def insert_into_axes(axes: list[str], axis: list[str]) -> list[str]:
     >>> print(all)
     ['x', 'y', 'iim', 'c', 'mz']
     """
-
     out = axes.copy()
     inx = [axes.index(a) if a in out else -1 for a in axis]
     offset = 0
@@ -78,7 +76,6 @@ class NexusEntrypoint(BackendEntrypoint):
             entries: dict[str, xr.DataArray] = {}
 
             entry_array = self._read_nxdata(entry_path)
-            # entry_name = Path(entry_path).parts[-1]
             entries[cast(str, entry_array.name)] = entry_array
 
             ds = xr.Dataset(data_vars=entries)
@@ -155,7 +152,7 @@ class NexusEntrypoint(BackendEntrypoint):
                     inx = [inx]
                 if not isinstance(inx, Iterable):
                     raise TypeError(
-                        f"Expcted {data_path}/{index_path} to be int or list[int] but found {type(inx)}"
+                        f"Expected {data_path}/{index_path} to be int or list[int] but found {type(inx)}"
                     )
 
                 coord_dims = tuple([axes[i] for i in inx])
@@ -220,7 +217,6 @@ class NexusEntrypoint(BackendEntrypoint):
             if nx_class == "NXdata":
                 entry_array = self._read_nxdata(sub_path)
                 entry_name = path
-                # entry_name = cast(str, entry_array.name)
                 entries[entry_name] = entry_array
         return xr.Dataset(data_vars=entries, attrs=root_attrs)
 

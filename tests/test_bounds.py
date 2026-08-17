@@ -35,22 +35,22 @@ def bounds(draw):
     st.integers(min_value=0, max_value=100),
     st.integers(min_value=0, max_value=100),
 )
-def test_indexes(bounds, iw, ih, iz):
+def test_indexes(bounds, w_inx, h_inx, z_inx):
 
     inner_slices = bounds.inner_slices()
 
     if (
-        inner_slices[0].start <= iw < inner_slices[0].stop
-        and inner_slices[1].start <= ih < inner_slices[1].stop
-        and inner_slices[2].start <= iz < inner_slices[2].stop
+        inner_slices[0].start <= w_inx < inner_slices[0].stop
+        and inner_slices[1].start <= h_inx < inner_slices[1].stop
+        and inner_slices[2].start <= z_inx < inner_slices[2].stop
     ):
-        inner_inx = bounds.inner_index(iw, ih, iz)
+        inner_inx = bounds.inner_index(w_inx, h_inx, z_inx)
         outer_inx = bounds.outer_index(*inner_inx)
 
-        assert outer_inx == [iw, ih, iz]
+        assert outer_inx == [w_inx, h_inx, z_inx]
     else:
         with pytest.raises(IndexError):
-            bounds.inner_index(iw, ih, iz)
+            bounds.inner_index(w_inx, h_inx, z_inx)
 
 
 @st.composite

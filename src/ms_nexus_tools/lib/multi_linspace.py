@@ -10,7 +10,7 @@ import numpy as np
 @dataclass
 class MultiLinspace:
     """
-    It allows spaning a space, by presenting a multi-linear function.
+    It allows spanning a space, by presenting a multi-linear function.
     This combines percentiles and linspace.
     """
 

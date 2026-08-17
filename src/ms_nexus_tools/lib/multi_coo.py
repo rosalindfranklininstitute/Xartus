@@ -16,7 +16,7 @@ def find_uniques(
     count: bool = False,
 ) -> tuple[Intp1D, Intp1D | None]:
     """
-    Finds the uniqe indices in the data. Optionally returns the number of occurances of each unique value.
+    Finds the unique indices in the data. Optionally returns the number of occurrences of each unique value.
     This assumes the coords array has been sorted.
 
     >>> find_uniques(np.array([[0,0],[0,1],[1,0]]).T, shape=(2,2), count=True)

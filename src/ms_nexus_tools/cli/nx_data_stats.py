@@ -16,7 +16,7 @@ from ..lib.utils import format_bytes
 def print_nx_data_stats() -> None:
     parser = argparse.ArgumentParser(
         "nx_data_stats",
-        description="Reads all the high leve subentries prints some details about the data.",
+        description="Reads all the high level subentries prints some details about the data.",
     )
 
     parser.add_argument(

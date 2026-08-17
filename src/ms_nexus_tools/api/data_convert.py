@@ -305,7 +305,7 @@ def provision_data_axis(
                     values = args.data_source.exact_axis_values(axis)
                     if len(values) != full_shape[axis.primary_axis]:
                         raise InvalidAxisError(
-                            f"Expected {full_shape[axis.primary_axis]} values for {axis.name} but recived {len(values)}.",
+                            f"Expected {full_shape[axis.primary_axis]} values for {axis.name} but received {len(values)}.",
                         )
                     if values.dtype != axis.dtype:
                         raise TypeError(
@@ -324,7 +324,7 @@ def provision_data_axis(
                     values = args.data_source.binned_axis_edges(axis)[1:]
                     if len(values) != full_shape[axis.primary_axis]:
                         raise InvalidAxisError(
-                            f"Expected {full_shape[axis.primary_axis] + 1} edges for {axis.name} but recived {len(values) + 1}.",
+                            f"Expected {full_shape[axis.primary_axis] + 1} edges for {axis.name} but received {len(values) + 1}.",
                         )
                     if values.dtype != axis.dtype:
                         raise TypeError(
@@ -537,7 +537,7 @@ def write_data(
     if isinstance(chunk_data, np.ndarray):
         if len(binned_axes) != 0:
             raise TypeError(
-                "Recived a binned axis, with dense data. The data should be sparse. ",
+                "Received a binned axis, with dense data. The data should be sparse. ",
             )
 
         for data_entry in data_chunks.names:

@@ -21,7 +21,7 @@ def man_data_and_nexus():
     man_data = ManData()
     man_data_source = Man2DDataSource(
         man_data,
-        supplimentary_axes=[
+        supplementary_axes=[
             Axis("time", 0, AxisType.EXACT, np.float32, "s"),
             Axis("error", 2, AxisType.EXACT, np.float32, ""),
         ],
@@ -89,7 +89,7 @@ def test_error_on_load_non_nxdata_dataset(man_data_and_nexus):
     nx_file = man_data_and_nexus[1]
 
     with pytest.raises(InvalidEntryError, match="Expected .* to be NXdata"):
-        ds = xr.open_dataset(nx_file, engine="nexus", entry_path="/entry/")
+        xr.open_dataset(nx_file, engine="nexus", entry_path="/entry/")
 
 
 def test_whole_tree(man_data_and_nexus):
@@ -139,4 +139,4 @@ def test_error_on_load_non_nxentry_datatree(man_data_and_nexus):
     with pytest.raises(
         InvalidEntryError, match="Expected .* to be NXentry or NXsubentry"
     ):
-        dt = xr.open_datatree(nx_file, engine="nexus", root="/entry/images/data")
+        xr.open_datatree(nx_file, engine="nexus", root="/entry/images/data")

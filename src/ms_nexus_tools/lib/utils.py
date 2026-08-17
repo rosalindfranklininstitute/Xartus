@@ -275,7 +275,7 @@ def reduce_shape(shape: Shape, axis=None) -> Shape:
 class FileGuard(AbstractContextManager):
     """
     This context takes in a collection and checks their state after the block runs.
-    It can delete files if a process fails (to avoid leaving poluting temporary files on process failures.)
+    It can delete files if a process fails (to avoid leaving polluting temporary files on process failures.)
     It can check that files exist after a process (asserting a know outcome)
     """
 
@@ -312,7 +312,7 @@ def simplify_chunks(
 ) -> tuple[int, ...]:
     """
     Returns the simplified chunks representation (tuple[int,...]) from the given chunks.
-    Aserts that all the values for each dimension are the same, except the last.
+    Asserts that all the values for each dimension are the same, except the last.
     >>> simplify_chunks((1,2,3))
     (1, 2, 3)
 
@@ -333,7 +333,7 @@ def simplify_chunks(
         elif len(c) == 1:
             result.append(c[0])
         elif len(c) == 0:
-            raise ValueError("Chunk compoenent had size of 0.")
+            raise ValueError("Chunk component had size of 0.")
         else:
             main_value = c[0]
             value_count = len(c)

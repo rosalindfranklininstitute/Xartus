@@ -76,7 +76,7 @@ class AbstractDataSource(AbstractContextManager):
     def output_chunks(self) -> dict[str, Shape]:
         """
         Returns the names and chunking priorities of the desired output array.
-        For examlpe simple image data (x,y, spectra) with shape (32,32,184000)
+        For example simple image data (x,y, spectra) with shape (32,32,184000)
         might produce:
         'images':   (1,1,2) -> (32,32,1)
         'spectra':  (2,2,1) -> (1,1,184000)
@@ -84,7 +84,7 @@ class AbstractDataSource(AbstractContextManager):
 
     def read_chunks(self) -> list[Shape] | None:
         """
-        Retruns a list of chunking priorities taht can be used for reading the raw data.
+        Returns a list of chunking priorities that can be used for reading the raw data.
         This is used in conjunction with chunk_read_count to select the most efficient reading scheme, and to track progress.
         If this returns None, then the priorities from the output_chunks are used.
 
@@ -102,7 +102,7 @@ class AbstractDataSource(AbstractContextManager):
     def axis_definitions(self) -> list[Axis]:
         """
         Returns the axis that should be used when storing the data.
-        For examlpe simple image data (x,y, spectra):
+        For example simple image data (x,y, spectra):
         axis(0) : Axis('x', 0, [], EXACT, 'um')
         axis(1) : Axis('y', 1, [], EXACT, 'um')
         If is it exact:
@@ -121,7 +121,7 @@ class AbstractDataSource(AbstractContextManager):
     def binned_axis_edges(self, axis: Axis) -> np.ndarray:
         """
         Returns the bin edges used to histogram the given binned axis.
-        This is used for generting the output accumulations accros this axis, if required.
+        This is used for generating the output accumulations across this axis, if required.
         """
 
     @abstractmethod
@@ -129,7 +129,7 @@ class AbstractDataSource(AbstractContextManager):
         """
         Returns the names and lists of axis that should be
         accumulated (summed and max).
-        For examlpe simple image data (x,y, spectra):
+        For example simple image data (x,y, spectra):
         might produce:
         'total_images':     ('mz') # Accumulate over the spectra
         'total_spectra':    ('x','y') # Accumulate over the images

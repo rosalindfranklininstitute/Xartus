@@ -283,9 +283,9 @@ class Chunker:
     ) -> "Chunker":
         """
         Find the chunker that covers data_shape
-        with chunks that are intiger multiples of chunk_shape,
+        with chunks that are integer multiples of chunk_shape,
         with at most max_item_count items per chunk.
-        If priority is not provided all arangements of (1,2,3,...) are searched.
+        If priority is not provided all arrangements of (1,2,3,...) are searched.
         If priority is provided, then only that priority is used.
 
         For example:
@@ -391,7 +391,7 @@ class Chunker:
 
     def chunks(self) -> Generator[Chunk]:
         """
-        A generator that yeilds all the chunks covered by this chunker.
+        A generator that yields all the chunks covered by this chunker.
         """
         indices = np.zeros((self.n_dims,))
         for _chunk_inx in range(self.n_chunks):
