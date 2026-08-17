@@ -1,0 +1,54 @@
+
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:xlink="http://www.w3.org/1999/xlink"
+    width="123.86"
+    height="20"
+    role="img"
+    aria-label="License: Apache-2.0"
+>
+    <style>
+        rect {
+            height: 20px;
+        }
+
+        text {
+            text-rendering: geometricPrecision;
+            dominant-baseline: middle;
+            text-anchor: middle;
+            font-family: Verdana,Geneva,DejaVu Sans,sans-serif;
+            font-size: 110px;
+            fill: #fff;
+        }
+
+        .shadow {
+            transform: translate(10px, 10px);
+            fill: #010101;
+        }
+    </style>
+    <title>License: Apache-2.0</title>
+    <linearGradient id="s" x2="0" y2="100%">
+        <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+        <stop offset="1" stop-opacity=".1"/>
+    </linearGradient>
+    <clipPath id="r">
+        <rect width="100%" rx="3" fill="#fff"/>
+    </clipPath>
+    <g clip-path="url(#r)" >
+        <g>
+            <rect width="50.66" fill="#555"/>
+            <g transform="scale(.1)">
+                <text x="253.3" y="100" textLength="406.6" class="shadow">License</text>
+                <text x="253.3" y="100" textLength="406.6">License</text>
+            </g>
+        </g>
+        <g transform="translate(50.66 0)">
+            <rect width="73.2" fill="#dfb317"/>
+            <g transform="scale(.1)">
+                <text x="366" y="100" textLength="632" class="shadow">Apache-2.0</text>
+                <text x="366" y="100" textLength="632">Apache-2.0</text>
+            </g>
+        </g>
+        <rect width="100%" height="100%" fill="url(#s)"/>
+    </g>
+</svg>
