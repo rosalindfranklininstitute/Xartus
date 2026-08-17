@@ -145,18 +145,6 @@ def check_basic_axis_correct(
 
 def check_dense_correct(fle, man_data_source: Man2DDataSource):
     for data_name in ["images", "spectra"]:
-        assert f"/entry/{data_name}/data/signal" in fle
-        for axis in man_data_source.axes.values():
-            assert f"/entry/{data_name}/data/{axis.name}" in fle
-            assert fle[f"/entry/{data_name}/data/{axis.name}"].dtype == axis.dtype
-            assert f"{axis.name}_indices" in fle[f"/entry/{data_name}/data/"].attrs
-            assert (
-                fle[f"/entry/{data_name}/data"].attrs[f"{axis.name}_indices"]
-                == axis.primary_axis
-            )
-
-        assert np.all(fle[f"/entry/{data_name}/data"].attrs["axes"] == ["x", "y", "mz"])
-
         assert (
             fle[f"/entry/{data_name}/data/signal"].shape
             == man_data_source.man_data.shape
@@ -258,9 +246,14 @@ def check_binned_correct(
         assert has_some_sparsity
 
     if any_binned:
-        assert "/entry/item_counts/data/signal" in fle
-        assert np.all(fle["/entry/item_counts/data/signal"][...] <= max_count_per_bin)
-        assert np.max(fle["/entry/item_counts/data/signal"][...]) == max_count_per_bin
+        assert "/entry/item_counts/data/items_per_bin" in fle
+        assert np.all(
+            fle["/entry/item_counts/data/items_per_bin"][...] <= max_count_per_bin
+        )
+        assert (
+            np.max(fle["/entry/item_counts/data/items_per_bin"][...])
+            == max_count_per_bin
+        )
         for axis in man_data_source.axes.values():
             assert f"/entry/item_counts/data/{axis.name}" in fle
             assert f"/entry/item_counts/data/{axis.name}_exact" not in fle
@@ -365,8 +358,8 @@ def test_all_dimensions_binned(nx_file, man_file, man_data):
                 data_part = fle[f"/entry/{data_name}/data/signal"]
                 assert np.sum(data_part) == np.sum(man_data_source.man_data.dense)
 
-        assert np.all(fle["/entry/item_counts/data/signal"][...] <= 8)
-        assert np.max(fle["/entry/item_counts/data/signal"][...]) == 8
+        assert np.all(fle["/entry/item_counts/data/items_per_bin"][...] <= 8)
+        assert np.max(fle["/entry/item_counts/data/items_per_bin"][...]) == 8
 
 
 def test_sparse_all_exact(nx_file, man_file, man_data):

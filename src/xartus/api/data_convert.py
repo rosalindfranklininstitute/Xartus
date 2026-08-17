@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
-from typing import Any, Iterable, Generator
+from typing import Any, Iterable, Generator, cast
 from threading import Lock, local
 import concurrent.futures as cfutures
 from dataclasses import dataclass, field
@@ -28,6 +28,7 @@ from ..lib.data_source import (
     AbstractDataSource,
     AxisType,
     Axis,
+    Signal,
 )
 from ..lib.exceptions import InvalidAxisError
 from ..lib.multi_coo import (
@@ -109,23 +110,16 @@ class DataChunks:
         self,
         names: Iterable[str],
         chunkers: Iterable[Chunker],
-        dtypes: Iterable[npt.DTypeLike],
+        definitions: Iterable[Signal],
     ):
         self.names: set[str] = set(names)
         self.chunkers: dict[str, Chunker] = dict(zip(names, chunkers, strict=True))
-        self.dtypes: dict[str, npt.DTypeLike] = dict(zip(names, dtypes, strict=True))
+        self.definitions: dict[str, Signal] = dict(zip(names, definitions, strict=True))
 
-    @staticmethod
-    def from_dict(data: dict[str, tuple[Chunker, npt.DTypeLike]]) -> "DataChunks":
-        names = set(data.keys())
-        chunkers = [c[0] for c in data.values()]
-        dtypes = [c[1] for c in data.values()]
-        return DataChunks(names, chunkers, dtypes)
-
-    def __setitem__(self, name: str, data: tuple[Chunker, npt.DTypeLike]) -> None:
+    def __setitem__(self, name: str, data: tuple[Chunker, Signal]) -> None:
         self.names.add(name)
         self.chunkers[name] = data[0]
-        self.dtypes[name] = data[1]
+        self.definitions[name] = data[1]
 
     def __repr__(self) -> str:
         return ",\n".join(
@@ -135,12 +129,12 @@ class DataChunks:
     def chunker(self, name: str) -> Chunker:
         return self.chunkers[name]
 
-    def dtype(self, name: str) -> npt.DTypeLike:
-        return self.dtypes[name]
+    def signal(self, name: str) -> Signal:
+        return self.definitions[name]
 
-    def items(self) -> Generator[tuple[str, Chunker, npt.DTypeLike]]:
+    def items(self) -> Generator[tuple[str, Chunker, Signal]]:
         for name in self.names:
-            yield name, self.chunker(name), self.dtype(name)
+            yield name, self.chunker(name), self.signal(name)
 
 
 def choose_memory_buffer(
@@ -193,8 +187,8 @@ def choose_memory_buffer_and_data_chunks(
             raise ValueError(
                 f"An invalid set of priorities was returned for dataset {name}: there should be {len(full_shape)} items, but only {len(priorities)} were provided.",
             )
-    signal_type = args.data_source.signal_type()
-    signal_item_width = np.dtype(signal_type).itemsize
+    signal_definition = args.data_source.signal_definition()
+    signal_item_width = np.dtype(signal_definition.dtype).itemsize
     data_max_items = {
         name: int(args.field_options.max_bytes_per_chunk / signal_item_width)
         for name in data_priorities
@@ -211,7 +205,7 @@ def choose_memory_buffer_and_data_chunks(
         chunker.normalise()
         data_chunks[name] = (
             chunker,
-            signal_type,
+            signal_definition,
         )
 
     axis_definitions = args.data_source.axis_definitions()
@@ -228,7 +222,7 @@ def choose_memory_buffer_and_data_chunks(
         chunker.normalise()
         data_chunks[_count_subentry_name()] = (
             chunker,
-            np.uint16,
+            Signal("items_per_bin", np.uint16, "items"),
         )
 
     size_per_item = signal_item_width + np.sum(
@@ -269,11 +263,12 @@ def provision_subentries(
 ) -> None:
     nxs.root.attrs["default"] = default_name
 
-    for name, chunker, dtype in data_chunks.items():
+    for name, chunker, signal in data_chunks.items():
         nxs.root[name] = NXsubentry(
             NXdata(
                 signal=create_field(
-                    dtype=dtype,
+                    name=signal.name,
+                    dtype=signal.dtype,
                     shape=chunker.data_shape,
                     compression=args.field_options.compression,
                     compression_opts=args.field_options.compression_opts,
@@ -415,7 +410,7 @@ def provision_accumulation_subentries(
     axis_definitions: dict[str, Axis],
 ) -> tuple[dict[str, Accumulation], dict[str, Accumulation]]:
     accumulations = args.data_source.output_accumulations()
-    dtype = args.data_source.signal_type()
+    signal = args.data_source.signal_definition()
 
     final_accumulations: dict[str, Accumulation] = {}
     count_accumulations: dict[str, Accumulation] = {}
@@ -472,7 +467,7 @@ def provision_accumulation_subentries(
                 nx_axis = NxAxis.create(
                     values=values,
                     name=ax.name,
-                    indices=[new_index + 1],
+                    indices=[cast(int, new_index + 1)],
                     unit=ax.units,
                 )
                 group_axes[new_index + 1].append(nx_axis)
@@ -488,7 +483,7 @@ def provision_accumulation_subentries(
         nxs.root[ac_name] = NXsubentry(
             NXdata(
                 signal=create_field(
-                    dtype=dtype,
+                    dtype=signal.dtype,
                     shape=(2, *acc_shape),
                     compression=args.field_options.compression,
                     compression_opts=args.field_options.compression_opts,
@@ -542,7 +537,8 @@ def write_data(
 
         for data_entry in data_chunks.names:
             assert data_entry != _count_subentry_name()
-            nxs.root[data_entry].data.signal[*memory_chunk] = chunk_data
+            signal_name = data_chunks.signal(data_entry).name
+            nxs.root[data_entry].data[signal_name][*memory_chunk] = chunk_data
         return chunk_data, None
 
     if chunk_data.coords.shape[1] == 0:
@@ -588,13 +584,13 @@ def write_data(
 
     axis_names = [axis.name for axis in binned_axes]
     axis_used = dict.fromkeys(axis_names, False)
-    for data_entry, _, _ in tqdm(data_chunk_values, desc="Processing data chunks"):
+    for data_entry, _, signal in tqdm(data_chunk_values, desc="Processing data chunks"):
         for name in chunk_data.values:
             if name != "signal" and name not in axis_names:
                 raise IndexError(f"Values provided for {name}, but axis is not binned.")
 
             if name == "signal":
-                ds = nxs.root[data_entry].data.signal
+                ds = nxs.root[data_entry].data[signal.name]
             elif data_entry == _count_subentry_name():
                 continue
             else:
@@ -720,8 +716,8 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
         print(
             f"maximum chunk size ({format_bytes(args.field_options.max_bytes_per_chunk)})",
         )
-        for name, chunker, dtype in data_chunks.items():
-            width = np.dtype(dtype).itemsize
+        for name, chunker, signal in data_chunks.items():
+            width = np.dtype(signal.dtype).itemsize
             print(
                 f"    {name: >10}: chunk shape {chunker.chunk_shape} and total count {chunker.chunk_count} and memory count {count_chunks_to_cover(memory_chunks.chunk_shape, chunker.chunk_shape)}.",
             )

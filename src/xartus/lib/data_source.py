@@ -16,6 +16,13 @@ from .bounds import Chunk, Shape
 from .multi_coo import MultiCOO
 
 
+@dataclass
+class Signal:
+    name: str
+    dtype: npt.DTypeLike
+    units: str | None = None
+
+
 class AxisType(Enum):
     EXACT = 1
     BINNED = 2
@@ -67,7 +74,7 @@ class AbstractDataSource(AbstractContextManager):
         """
 
     @abstractmethod
-    def signal_type(self) -> npt.DTypeLike:
+    def signal_definition(self) -> Signal:
         """
         Returns the type for data.
         """

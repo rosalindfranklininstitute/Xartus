@@ -518,7 +518,11 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "line-profiler", specifier = ">=5.0.2" }]
+dev = [
+    { name = "line-profiler", specifier = ">=5.0.2" },
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-cov", specifier = ">=7.1.0" },
+]
 
 [[package]]
 name = "nexusformat"
@@ -1119,20 +1123,15 @@ wheels = [
 
 [[package]]
 name = "xartus"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "argsui" },
     { name = "dask" },
     { name = "h5py" },
-    { name = "icecream" },
     { name = "matplotlib" },
     { name = "nexusformat" },
     { name = "numpy" },
-    { name = "pre-commit" },
-    { name = "pyimzml" },
-    { name = "pyside6" },
-    { name = "scipy" },
     { name = "sparse" },
     { name = "tqdm" },
     { name = "xarray" },
@@ -1141,9 +1140,11 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "hypothesis" },
+    { name = "icecream" },
     { name = "line-profiler" },
     { name = "nexus-pixel-man-test-data" },
     { name = "pillow" },
+    { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-autoprofile" },
     { name = "pytest-cov" },
@@ -1156,15 +1157,10 @@ requires-dist = [
     { name = "argsui", editable = "../argsui" },
     { name = "dask", specifier = ">=2026.3.0" },
     { name = "h5py", specifier = ">=3.15.1" },
-    { name = "icecream", specifier = ">=2.1.10" },
     { name = "matplotlib", specifier = ">=3.10.8" },
     { name = "nexusformat", specifier = ">=2.0.1" },
     { name = "numpy", specifier = ">=2.4.2" },
     { name = "numpy", specifier = ">=2.4.6" },
-    { name = "pre-commit", specifier = ">=4.6.2" },
-    { name = "pyimzml", editable = "../pyimzML" },
-    { name = "pyside6", specifier = ">=6.10.2" },
-    { name = "scipy", specifier = ">=1.17.0" },
     { name = "sparse", specifier = ">=0.18.0" },
     { name = "tqdm", specifier = ">=4.67.3" },
     { name = "xarray", specifier = ">=2026.7.0" },
@@ -1173,9 +1169,11 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "hypothesis", specifier = ">=6.151.7" },
+    { name = "icecream", specifier = ">=2.1.10" },
     { name = "line-profiler", specifier = ">=5.0.1" },
     { name = "nexus-pixel-man-test-data", editable = "../nexus_pixel_man_test_data" },
     { name = "pillow", specifier = ">=12.1.1" },
+    { name = "pre-commit", specifier = ">=4.6.2" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-autoprofile", specifier = ">=0.19.0" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
