@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 """
 Utilities for drawing images from 2D data.
 Here are utilities to mark annotations.
