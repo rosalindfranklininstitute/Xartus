@@ -50,11 +50,15 @@ nx_density = "ms_nexus_tools:print_nx_data_stats"
 test = "ms_nexus_tools:test"
 query = "ms_nexus_tools:query"
 bulk_query = "ms_nexus_tools:bulk_query"
-nxslice = "ms_nexus_tools:nxslice"
+
+[project.entry-points."xarray.backends"]
+nexus = "ms_nexus_tools.lib.xarray_backend:NexusEntrypoint"
 
 [build-system]
 requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
+
+
 
 [tool.uv.sources]
 argsui = { path = "../argsui", editable = true }
@@ -98,5 +102,4 @@ extend-exclude=["elements.py", "SIS_20260218_Elements_and_Isotopes.csv"]
 [tool.ty.analysis]
 allowed-unresolved-imports = ["nexusformat.nexus.tree.NXparameters" ,"nexusformat.nexus.tree.NXinstrument"]
 
-[project.entry-points."xarray.backends"]
-nexus = "ms_nexus_tools.lib.xarray_backend:NexusEntrypoint"
+

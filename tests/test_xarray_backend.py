@@ -5,18 +5,14 @@ from ms_nexus_tools.lib.exceptions import InvalidEntryError
 from pathlib import Path
 
 import numpy as np
-import h5py
 import xarray as xr
 
-from ms_nexus_tools.api import nexus_slice, data_convert
+from ms_nexus_tools.api import data_convert
 from ms_nexus_tools.lib.data_source import Axis, AxisType
-from ms_nexus_tools.lib.nexus_slicer import NexusSlicer
-import ms_nexus_tools.lib.xarray_backend
 
 from nexus_pixel_man_test_data import Man2DDataSource, ManData, data_files
 
 import pytest
-from hypothesis import given, strategies as st
 
 
 @pytest.fixture(scope="module")
