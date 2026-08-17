@@ -22,6 +22,7 @@ dependencies = [
     "sparse>=0.18.0",
     "numpy>=2.4.6",
     "tqdm>=4.67.3",
+    "xarray>=2026.7.0",
 ]
 license = "Apache-2.0"
 license-files = ["LICENSES/*"]
@@ -97,3 +98,5 @@ extend-exclude=["elements.py", "SIS_20260218_Elements_and_Isotopes.csv"]
 [tool.ty.analysis]
 allowed-unresolved-imports = ["nexusformat.nexus.tree.NXparameters" ,"nexusformat.nexus.tree.NXinstrument"]
 
+[project.entry-points."xarray.backends"]
+nexus = "ms_nexus_tools.lib.xarray_backend:NexusEntrypoint"

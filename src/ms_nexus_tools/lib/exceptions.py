@@ -11,3 +11,11 @@ class InnerDataNotContainedError(Exception):
 
 class UnsupportedDataError(RuntimeError):
     pass
+
+
+class InvalidAxisError(Exception):
+    pass
+
+
+class InvalidEntryError(Exception):
+    pass

@@ -28,8 +28,8 @@ from ..lib.data_source import (
     AbstractDataSource,
     AxisType,
     Axis,
-    InvalidAxisError,
 )
+from ..lib.exceptions import InvalidAxisError
 from ..lib.multi_coo import (
     MultiCOO,
 )
@@ -665,7 +665,7 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
 
     nxs = NexusFile(args.out_path, mode="w")
     with nxs.as_context():
-        add_items_to_group(args.data_source.instrament_metadata(), nxs.instrument)
+        add_items_to_group(args.data_source.instrument_metadata(), nxs.instrument)
         add_items_to_group(args.data_source.experiment_metadata(), nxs.experiment)
 
         full_shape, is_dense, density = args.data_source.shape()

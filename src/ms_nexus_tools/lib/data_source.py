@@ -41,10 +41,6 @@ class UnknownAxisError(Exception):
                 super().__init__(f"Unknown binned axis: {name}")
 
 
-class InvalidAxisError(Exception):
-    pass
-
-
 class DataShape(NamedTuple):
     shape: Shape
     is_sparse: bool
@@ -53,9 +49,9 @@ class DataShape(NamedTuple):
 
 class AbstractDataSource(AbstractContextManager):
     @abstractmethod
-    def instrament_metadata(self) -> dict[str, Any]:
+    def instrument_metadata(self) -> dict[str, Any]:
         """
-        Returns a dictionary of values that will be stored as the instrament metadata.
+        Returns a dictionary of values that will be stored as the instrument metadata.
         """
 
     @abstractmethod
