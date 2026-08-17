@@ -4,7 +4,7 @@
 
 from hypothesis import given
 
-from ms_nexus_tools import lib as nxlib
+from xartus import lib as nxlib
 
 import numpy as np
 

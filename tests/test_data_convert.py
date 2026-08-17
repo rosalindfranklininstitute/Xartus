@@ -10,9 +10,9 @@ from pathlib import Path
 import numpy as np
 import h5py
 
-from ms_nexus_tools.lib.chunker import count_chunks_to_cover
-from ms_nexus_tools.api import data_convert
-from ms_nexus_tools.lib.data_source import Axis, AxisType
+from xartus.lib.chunker import count_chunks_to_cover
+from xartus.api import data_convert
+from xartus.lib.data_source import Axis, AxisType
 
 from nexus_pixel_man_test_data import Man2DDataSource, ManData, data_files
 

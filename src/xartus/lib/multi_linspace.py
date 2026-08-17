@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 
-from ms_nexus_tools.lib.dtypes import Float1D32
+from .dtypes import Float1D32
 from dataclasses import dataclass, field
 import numpy as np
 

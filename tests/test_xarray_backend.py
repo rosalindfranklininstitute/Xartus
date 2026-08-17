@@ -1,14 +1,14 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
-from ms_nexus_tools.lib.exceptions import InvalidEntryError
+from xartus.lib.exceptions import InvalidEntryError
 from pathlib import Path
 
 import numpy as np
 import xarray as xr
 
-from ms_nexus_tools.api import data_convert
-from ms_nexus_tools.lib.data_source import Axis, AxisType
+from xartus.api import data_convert
+from xartus.lib.data_source import Axis, AxisType
 
 from nexus_pixel_man_test_data import Man2DDataSource, ManData, data_files
 

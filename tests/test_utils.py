@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from ms_nexus_tools import lib as mnxlib
+from xartus import lib as mnxlib
 
 
 def test_count_digits():

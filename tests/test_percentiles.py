@@ -5,7 +5,7 @@ import sys
 
 import numpy as np
 
-from ms_nexus_tools import lib as nxlib
+from xartus import lib as nxlib
 
 
 def test_percentiles():

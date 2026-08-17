@@ -5,8 +5,8 @@
 from hypothesis import strategies as st, given
 import pytest
 
-from ms_nexus_tools.lib.bounds import Chunk
-from ms_nexus_tools.lib import ContainedBounds
+from xartus.lib.bounds import Chunk
+from xartus.lib import ContainedBounds
 
 
 @st.composite

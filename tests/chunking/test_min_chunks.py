@@ -7,7 +7,7 @@ from hypothesis import given, strategies as st
 
 import numpy as np
 
-from ms_nexus_tools.lib.chunker import Chunker
+from xartus.lib.chunker import Chunker
 
 
 @given(

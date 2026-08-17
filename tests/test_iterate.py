@@ -4,7 +4,7 @@
 import numpy as np
 from hypothesis import given, strategies as st
 
-from ms_nexus_tools import lib as nxlib
+from xartus import lib as nxlib
 
 
 def test_iterage():

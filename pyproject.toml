@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 
 [project]
-name = "ms-nexus-tools"
+name = "Xartus"
 version = "0.2.0"
 description = "Add your description here"
 readme = "README.md"
@@ -25,7 +25,7 @@ dependencies = [
     "xarray>=2026.7.0",
     "pre-commit>=4.6.2",
 ]
-license = "RFI-Apache-2.0-Commons-clause"
+license = "LicenseRef-RFI-Apache-2.0-Commons-clause"
 license-files = ["LICENSES/*"]
 
 [dependency-groups]
@@ -42,18 +42,18 @@ dev = [
 ]
 
 [project.scripts]
-profile = "ms_nexus_tools:profile"
-compound = "ms_nexus_tools:compound"
-massimage = "ms_nexus_tools:massimage"
-specimage = "ms_nexus_tools:specimage"
-inspect = "ms_nexus_tools:inspect"
-nx_density = "ms_nexus_tools:print_nx_data_stats"
-test = "ms_nexus_tools:test"
-query = "ms_nexus_tools:query"
-bulk_query = "ms_nexus_tools:bulk_query"
+profile = "xartus:profile"
+compound = "xartus:compound"
+massimage = "xartus:massimage"
+specimage = "xartus:specimage"
+inspect = "xartus:inspect"
+nx_density = "xartus:print_nx_data_stats"
+test = "xartus:test"
+query = "xartus:query"
+bulk_query = "xartus:bulk_query"
 
 [project.entry-points."xarray.backends"]
-nexus = "ms_nexus_tools.lib.xarray_backend:NexusEntrypoint"
+nexus = "xartus.lib.xarray_backend:NexusEntrypoint"
 
 [build-system]
 requires = ["uv_build>=0.10.0,<0.11.0"]
@@ -87,14 +87,14 @@ addopts = [
     "--cov-report=html", 
     "--cov-branch",
     "--local-badge-output-dir=badges",
-    "--local-badge-package=ms-nexus-tools",
+    "--local-badge-package=xartus",
 ]
 
 [tool.line_profiler.kernprof]
 line-by-line = true
 verbose = false
 skip-zero = true
-prof-mod = [ 'tmp.py', 'ms_nexus_tools']
+prof-mod = [ 'tmp.py', 'xartus']
 prof-imports = true
 
 [tool.typos.files]
