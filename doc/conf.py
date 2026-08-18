@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path("..").absolute()))
 
 project = "Xartus"
-copyright = "2026, Duncan McDougall (duncan.mcdougall@rfi.ac.uk)"
+copyright = "2026, Duncan McDougall (duncan.mcdougall@rfi.ac.uk)"  # noqa: A001
 author = "Duncan McDougall (duncan.mcdougall@rfi.ac.uk)"
 release = "v0.2.0"
 

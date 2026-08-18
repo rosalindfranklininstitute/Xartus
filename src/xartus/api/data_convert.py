@@ -7,7 +7,6 @@ import concurrent.futures as cfutures
 from dataclasses import dataclass, field
 from pathlib import Path
 import numpy as np
-import numpy.typing as npt
 import sparse
 from h5py import h5s
 

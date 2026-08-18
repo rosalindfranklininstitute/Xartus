@@ -67,14 +67,12 @@ class AbstractDataSource(AbstractContextManager):
         """
         Called to open the data source.
         """
-        pass
 
     @abstractmethod
     def __exit__(self, exc_type, exc_value, traceback):
         """
         Called to close the data source.
         """
-        pass
 
     @abstractmethod
     def instrument_metadata(self) -> dict[str, Any]:
