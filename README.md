@@ -4,22 +4,15 @@ SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 -->
 
-# Mass Spectrometry NeXus Tools
-This repo is hope to a collection of tools for converting mass spectrometry data into the [NeXus][https://www.nexusformat.org/] format.
-In addition there are tools to transform the data.
+# Xartus: <strong>Xarr</strong>ay <strong>t</strong>hrough NeX<strong>us</strong>
 
-## NeXus details
-Nexus is a general metadata structure, and so can host any data shape.
-For the RFI we will be storing our data as one large 4 dimensional block. 
-So far the four dimensions are layers, image_width, image_height, and spectrum.
+This repo is hope to a collection of tools for converting data into the [NeXus](https://www.nexusformat.org/) format.
+In addition, there are tools to read and write NeXus files to and from [Xarray](https://docs.xarray.dev/en/stable/index.html) DataArrays, DataSets and Datatrees.
 
-## Ionoptika 
-The Ionoptika software has the option to export files to the h5 file format. 
-This is an improvement of closed or proprietary software formats.
-The data is stored twice: 
-Once by spectrum, listing every layer and pixel.
-Once by image, listing every layer and bin of the spectrum.
-Both of these are slow to process, but especially the second one. 
-The _ion2rfi_ tool can be used to transform these h5 files into a simpler, smaller and more performant structure.
-Both sets of data can be transformed. However it is recommended that the "mass images" not be used for large files as it is spectacularly slow.
+The library has two core parts and a few helper utilities.
 
+  1. The `data_converter` and `data_source` allows reading any data into a NeXus file.
+  2. An xarray `BackendEntrypoint` (`NexusEntrypoint`) allows reading NeXus files into xarray.
+  3. Xarray accessors (`array.nexus`, `dataset.nexus`, and `datatree.nexus`) allow saving the data to NeXus files.
+  4. `utils` has some helper functions that are commmonly needed when reading/processing common data formats.
+  5. `plotting` adds alternate plotting to pcolormesh, and plotting slices of a dataset.

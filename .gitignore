@@ -20,3 +20,7 @@ coverage.xml
 .pytest_cache/
 cover/
 
+# Generated documentation
+doc/CODE/*
+doc/build/*
+

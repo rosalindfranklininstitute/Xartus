@@ -55,6 +55,27 @@ class DataShape(NamedTuple):
 
 
 class AbstractDataSource(AbstractContextManager):
+    """
+    Provides an interface that represents raw data.
+
+    If this is fulfilled, then the class can be added to the :obj:`~xartus.api.data_converter.ProcessArgs` and :obj:`~xartus.api.data_converter.process` will read data from this class and write it to the specified NeXus file.
+
+    """
+
+    @abstractmethod
+    def __enter__(self):
+        """
+        Called to open the data source.
+        """
+        pass
+
+    @abstractmethod
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Called to close the data source.
+        """
+        pass
+
     @abstractmethod
     def instrument_metadata(self) -> dict[str, Any]:
         """
@@ -110,11 +131,17 @@ class AbstractDataSource(AbstractContextManager):
         """
         Returns the axis that should be used when storing the data.
         For example simple image data (x,y, spectra):
+
         axis(0) : Axis('x', 0, [], EXACT, 'um')
+
         axis(1) : Axis('y', 1, [], EXACT, 'um')
+
         If is it exact:
+
         axis(2) : Axis('mz', 2, [], EXACT, 'mz')
+
         if it is only peaks:
+
         axis(2) : Axis('mz', 2, [0,1], BINNED, 'mz')
         """
 
@@ -152,13 +179,13 @@ class AbstractDataSource(AbstractContextManager):
         Read data from the source in the region specified by
         memory_chunk and return that data.
 
-        Parameters:
-        memory_chunk:   The bounds of the data to read.
-        update:         A callback to update progress.
-                        The total of the progress counter is
-                        sum([chunk_read_count(mc) for mc in all_memory_chunks])
+        Args:
+            memory_chunk:   The bounds of the data to read.
+            update:         A callback to update progress.
+                            The total of the progress counter is
+                            sum([chunk_read_count(mc) for mc in all_memory_chunks])
         Returns:
-        The data from the source.
-        -> return_data.shape == self.shape()
+            The data from the source.
+            -> return_data.shape == self.shape()
 
         """
