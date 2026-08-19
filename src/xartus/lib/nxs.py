@@ -11,7 +11,6 @@ import numpy.typing as npt
 
 from .bounds import Shape, Chunk, ContainedBounds
 from .chunker import Chunker
-from .normalisation import Accumulator
 
 from nexusformat.nexus import NXentry, NXfield, NXdata, nxload
 from nexusformat.nexus.tree import (
@@ -377,12 +376,13 @@ def create_standard_file(
                 ],
             ],
         )
-    acc_count = len(Accumulator)
+    acc_values = ["sum", "max"]
+    acc_count = len(acc_values)
     total_axes = [
         [
             NxAxis.create(
                 name="accumulator",
-                values=[t.value for t in Accumulator],
+                values=acc_values,
                 indices=[0],
             ),
         ],

@@ -784,5 +784,5 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
         ):
             if accumulation.has_data:
                 extra_slices = [slice(None) for _ in range(accumulation.ndim)]
-                nxs.root[name].data.signal[0, *extra_slices] = accumulation.max_data
-                nxs.root[name].data.signal[1, *extra_slices] = accumulation.sum_data
+                nxs.root[name].data.signal[0, *extra_slices] = accumulation.sum_data
+                nxs.root[name].data.signal[1, *extra_slices] = accumulation.max_data

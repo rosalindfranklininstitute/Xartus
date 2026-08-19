@@ -10,5 +10,4 @@ from . import utils as utils
 from .bounds import ContainedBounds
 from .h5_printer import print_group
 from .image import OriginLocation
-from .normalisation import Accumulator, IncrementalAccumulator, Norm
-from .timers import JSONTimer, Timer, time_this
+from .timers import JSONTimer

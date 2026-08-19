@@ -158,13 +158,13 @@ def check_dense_correct(fle, man_data_source: Man2DDataSource):
     total_image = np.sum(man_data_source.man_data.dense, axis=2)
     assert fle["/entry/total_image/data/signal"].shape == (2, *total_image.shape)
     np.testing.assert_allclose(
-        fle["/entry/total_image/data/signal"][1, :, :], total_image
+        fle["/entry/total_image/data/signal"][0, :, :], total_image
     )
 
     total_spectra = np.sum(man_data_source.man_data.dense, axis=(0, 1))
     assert fle["/entry/total_spectra/data/signal"].shape == (2, *total_spectra.shape)
     np.testing.assert_allclose(
-        fle["/entry/total_spectra/data/signal"][1, :], total_spectra
+        fle["/entry/total_spectra/data/signal"][0, :], total_spectra
     )
 
 
@@ -234,11 +234,11 @@ def check_binned_correct(
         ]
         data_slice = man_data_source.man_data.dense[:, :, 60 * ii : 60 * (ii + 1)]
         np.testing.assert_allclose(
-            np.sum(file_slice[1, :]),
+            np.sum(file_slice[0, :]),
             np.sum(data_slice),
         )
         np.testing.assert_allclose(
-            np.max(file_slice[0, :]),
+            np.max(file_slice[1, :]),
             np.max(data_slice),
         )
 
