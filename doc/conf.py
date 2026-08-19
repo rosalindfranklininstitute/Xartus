@@ -24,7 +24,6 @@ release = "v0.2.0"
 
 extensions = [
     "myst_parser",
-    "sphinx.ext.napoleon",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",

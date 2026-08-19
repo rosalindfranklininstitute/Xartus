@@ -1,8 +1,8 @@
+@ECHO OFF
+
 REM SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 REM 
 REM SPDX-License-Identifier: LicenseRef-Sphinx
-
-@ECHO OFF
 
 pushd %~dp0
 

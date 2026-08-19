@@ -58,14 +58,42 @@ class Chunker:
     ) -> "Chunker":
         """
         Returns chunking where each chunk has at most item_per_chunk items.
-        Lower priorities will have more values per chunk.
-        So that:
-        >>> Chunker.from_max_item_count(data_shape=(100,100), priorities=(1,2), items_per_chunk=10).chunk_shape
-        (10, 1)
 
-        and
-        >>> Chunker.from_max_item_count(data_shape=(100,100), priorities=(2,1), items_per_chunk=10).chunk_shape
-        (1, 10)
+        Lower priorities will have more values per chunk (larger chunks).
+        The maximum number of items per chunk can be specified. In addition,
+        the minimum number of chunks per dimension can be specified.
+
+
+        Args:
+            data_shape: The sahpe of the data that needs to be chunked.
+            priorities: Which dimensions to chunk first.
+                        A lower number means that dimension will have more items per chunk, i.e larger chunks.
+            items_per_chunk: The maximum number of items any single chunk can contain.
+            min_chunk_count: The minimum number of chunks the data can be chunked into.
+
+        Returns:
+            An instance of chunker that represents the chunking specified.
+
+        Notes:
+            Increasing the number of chunks per dimension reduces the number of
+            items per chunk. Therefore min_chunk_count and items_per_chunk do
+            not compete. Rather both specify a maximum and the lower maximum is
+            respectred, so that both are satisfied.
+
+        Examples:
+            >>> chunker = Chunker.from_max_item_count(data_shape=(100,100), priorities=(1,2), items_per_chunk=10)
+            >>> chunker.chunk_shape
+            (10, 1)
+
+            >>> chunker.chunk_count
+            (10, 100)
+
+            >>> chunker = Chunker.from_max_item_count(data_shape=(100,100), priorities=(2,1), items_per_chunk=10)
+            >>> chunker.chunk_shape
+            (1, 10)
+
+            >>> chunker.chunk_count
+            (100, 10)
         """
         chunker = Chunker()
         assert len(data_shape) == len(priorities)
@@ -153,13 +181,27 @@ class Chunker:
         """
         Returns chunking where there are at most chunk_count chunks.
         Lower priorities will have more chunks.
-        So that:
-        >>> Chunker.from_min_chunks(data_shape=(100,100), priorities=(1,2), chunk_count=10).chunk_count
-        (10, 1)
 
-        and
-        >>> Chunker.from_min_chunks(data_shape=(100,100), priorities=(2,1), chunk_count=10).chunk_count
-        (1, 10)
+        Args:
+            data_shape: The shape of the data that needs to be chunked.
+            priorities: Which dimensions to chunk first.
+                        A lower number means that dimension will have more chunks, i.e smaller chunks.
+            chunk_count: The maximum number of chunks allowed to span the data.
+
+        Examples:
+            >>> chunker = Chunker.from_min_chunks(data_shape=(100,100), priorities=(1,2), chunk_count=10)
+            >>> chunker.chunk_shape
+            (10, 100)
+
+            >>> chunker.chunk_count
+            (10, 1)
+
+            >>> chunker = Chunker.from_min_chunks(data_shape=(100,100), priorities=(2,1), chunk_count=10)
+            >>> chunker.chunk_shape
+            (100, 10)
+
+            >>> chunker.chunk_count
+            (1, 10)
         """
         chunker = Chunker()
         assert len(data_shape) == len(priorities)
@@ -260,6 +302,21 @@ class Chunker:
         data_shape: Shape,
         chunk_shape: Shape,
     ) -> "Chunker":
+        """
+        Find the chunker that covers data_shape with chunks of max size chunk_shape.
+
+        Args:
+            data_shape: The shape of the data that needs to be chunked.
+            chunk_shape: The shape of the chunks to use.
+
+        Examples:
+            >>> chunker = Chunker.from_chunk_shape(data_shape=(100,100), chunk_shape=(10,100))
+            >>> chunker.chunk_shape
+            (10, 100)
+
+            >>> chunker.chunk_count
+            (10, 1)
+        """
         chunker = Chunker()
         assert len(data_shape) == len(chunk_shape)
         chunker.data_shape = data_shape
@@ -288,28 +345,28 @@ class Chunker:
         If priority is not provided all arrangements of (1,2,3,...) are searched.
         If priority is provided, then only that priority is used.
 
-        For example:
+        Examples:
 
-        >>> Chunker.find_chunk_multiple((100,100,100), (10,10,10), 2000).chunk_shape
-        (10, 10, 20)
+            >>> Chunker.find_chunk_multiple((100,100,100), (10,10,10), 2000).chunk_shape
+            (10, 10, 20)
 
-        >>> Chunker.find_chunk_multiple((100,100,100), (10,10,10), 3000).chunk_shape
-        (10, 10, 30)
+            >>> Chunker.find_chunk_multiple((100,100,100), (10,10,10), 3000).chunk_shape
+            (10, 10, 30)
 
-        >>> Chunker.find_chunk_multiple((100,100,100), (10,10,10), 3500).chunk_shape
-        (10, 10, 30)
+            >>> Chunker.find_chunk_multiple((100,100,100), (10,10,10), 3500).chunk_shape
+            (10, 10, 30)
 
-        >>> Chunker.find_chunk_multiple((100,100,100), (10,10,10), 4000).chunk_shape
-        (10, 20, 20)
+            >>> Chunker.find_chunk_multiple((100,100,100), (10,10,10), 4000).chunk_shape
+            (10, 20, 20)
 
-        >>> Chunker.find_chunk_multiple((100,100,100), (10,10,10), 4000, priorities=(3,2,1)).chunk_shape
-        (10, 10, 40)
+            >>> Chunker.find_chunk_multiple((100,100,100), (10,10,10), 4000, priorities=(3,2,1)).chunk_shape
+            (10, 10, 40)
 
-        >>> Chunker.find_chunk_multiple((100,100,100), (25,10,4), 3000).chunk_shape
-        (25, 10, 12)
+            >>> Chunker.find_chunk_multiple((100,100,100), (25,10,4), 3000).chunk_shape
+            (25, 10, 12)
 
-        >>> Chunker.find_chunk_multiple((100,100,100), (25,10,4), 4000).chunk_shape
-        (25, 20, 8)
+            >>> Chunker.find_chunk_multiple((100,100,100), (25,10,4), 4000).chunk_shape
+            (25, 20, 8)
         """
         chunked_data_shape = tuple(
             int(math.ceil(d / c)) for d, c in zip(data_shape, chunk_shape, strict=True)

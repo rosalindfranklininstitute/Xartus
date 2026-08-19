@@ -18,22 +18,32 @@ def insert_into_axes(axes: list[str], axis: list[str]) -> list[str]:
     """
     This inserts the values from axis into axes, trying to respect the order.
     New elements are inserted as late as possible before any existing elements.
-    >>> axes = [
-    ...     ["x", "y"],
-    ...     ["x", "y", "mz"],
-    ...     ["y", "iim", "mz"],
-    ...     ["x", "c", "mz"],
-    ... ]
-    >>> all = []
-    >>> for axis in axes:
-    ...     print(all)
-    ...     all = insert_into_axes(all, axis)
-    []
-    ['x', 'y']
-    ['x', 'y', 'mz']
-    ['x', 'y', 'iim', 'mz']
-    >>> print(all)
-    ['x', 'y', 'iim', 'c', 'mz']
+
+    Args:
+        axes: The original list of axes to update. (Note that this list is not changes)
+        axis: The axis to insert into the list.
+
+    Returns:
+        A copy of axes with the axis inserted.
+
+    Examples:
+        >>> axes = [
+        ...     ["x", "y"],
+        ...     ["x", "y", "mz"],
+        ...     ["y", "iim", "mz"],
+        ...     ["x", "c", "mz"],
+        ... ]
+        >>> all = []
+        >>> for axis in axes:
+        ...     print(all)
+        ...     all = insert_into_axes(all, axis)
+        []
+        ['x', 'y']
+        ['x', 'y', 'mz']
+        ['x', 'y', 'iim', 'mz']
+
+        >>> print(all)
+        ['x', 'y', 'iim', 'c', 'mz']
     """
     out = axes.copy()
     inx = [axes.index(a) if a in out else -1 for a in axis]
@@ -63,6 +73,18 @@ class NexusEntrypoint(BackendEntrypoint):
         drop_variables=None,
         entry_path: None | str = None,
     ) -> xr.Dataset:
+        """
+        Opens the specified NXdata and returns it as the sole data array on a dataset.
+
+        Args:
+            filename_or_obj: The path to the file to read, or the file itself.
+            drop_variables: Unused
+            entry_path: The path within the file to read.
+                        If None, the default entry is used.
+
+        Returns:
+            Returns a xarray.Dataset containing a data array.
+        """
         try:
             should_close = self._open(filename_or_obj)
             assert self.nx_file is not None
@@ -79,6 +101,8 @@ class NexusEntrypoint(BackendEntrypoint):
 
             entries: dict[str, xr.DataArray] = {}
 
+            # TODO (dmd): Do I want to read all the data on the entry?
+            # https://example.com
             entry_array = self._read_nxdata(entry_path)
             entries[cast(str, entry_array.name)] = entry_array
 
@@ -100,6 +124,22 @@ class NexusEntrypoint(BackendEntrypoint):
         drop_variables=None,
         root: str = "/",
     ) -> xr.DataTree:
+        """
+        Opens the specified NXentry, NXsubentry or root and returns a DataTree of the object.
+
+        This recursively loads as follows:
+        - all NXdata groups are loaded into xarray.DataArrays on each node.
+        - all NXentry of NXsubentry are loaded as nodes in the tree.
+        - all other NX classes are have their arrtibutes loaded into a dictionary in the node at attrs[group_name].
+
+        Args:
+            filename_or_obj: The path to the file to read, or the file itself.
+            drop_variables: Unused
+            root: The path of the root of the tree within the file to read.
+
+        Returns:
+            Returns a xarray.DataTree representing the NeXus data rooted at root.
+        """
         try:
             should_close = self._open(filename_or_obj)
             assert self.nx_file is not None
@@ -231,6 +271,7 @@ class NexusEntrypoint(BackendEntrypoint):
 
         self.nx_file is populated if the file is opened.
         self.filename is always populated, even if the file was not reopened.
+
         """
         should_close = True
         if isinstance(filename_or_obj, h5py.File):

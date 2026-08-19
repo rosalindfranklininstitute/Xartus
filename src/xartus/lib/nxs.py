@@ -9,8 +9,7 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
-from .bounds import Shape, Chunk
-from .contained_bounds import ContainedBounds
+from .bounds import Shape, Chunk, ContainedBounds
 from .chunker import Chunker
 from .normalisation import Accumulator
 

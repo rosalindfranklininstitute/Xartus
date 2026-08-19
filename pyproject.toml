@@ -100,14 +100,15 @@ skip-zero = true
 prof-mod = [ 'tmp.py', 'xartus']
 prof-imports = true
 
-[tool.typos.files]
-extend-exclude=["elements.py", "SIS_20260218_Elements_and_Isotopes.csv"]
 
 [tool.ty.analysis]
 allowed-unresolved-imports = ["nexusformat.nexus.tree.NXparameters" ,"nexusformat.nexus.tree.NXinstrument"]
 
 [tool.typos.default.extend-identifiers]
 fle = 'fle'
+
+[tool.typos.default]
+extend-ignore-re = [ ">\\w+(\\s|<[^/])"] # Ignore words that are cut by html tags.
 
 [tool.bumpversion]
 current_version = "0.3.0"

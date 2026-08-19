@@ -7,7 +7,7 @@ from . import chunker as chunker
 from . import image as image
 from . import nxs as nxs
 from . import utils as utils
-from .contained_bounds import ContainedBounds
+from .bounds import ContainedBounds
 from .h5_printer import print_group
 from .image import OriginLocation
 from .normalisation import Accumulator, IncrementalAccumulator, Norm

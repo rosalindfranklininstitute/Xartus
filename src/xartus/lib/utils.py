@@ -18,25 +18,36 @@ from .dtypes import Number1D, Number
 def format_bytes(n: Number, digits: int = 2) -> str:
     """
     Format the given number of bytes into byte units.
-    >>> format_bytes(10)
-    '10b'
 
-    >>> format_bytes(1000)
-    '1000b'
+    Args:
+        n: The number of bits to convert to bytes.
+        digits: The number of digits to display, if decimals are used.
 
-    >>> format_bytes(512+1024)
-    '1.50Kb'
+    Returns:
+        The byte formatted number of bytes.
 
-    >>> format_bytes(1024*1024*1.25)
-    '1.25Mb'
+    Examples:
+        >>> format_bytes(10)
+        '10b'
 
-    Digits defaults to 2, but can be specified.
-    >>> format_bytes(512+1024, digits=1)
-    '1.5Kb'
+        >>> format_bytes(1000)
+        '1000b'
 
-    The number of digits does not have an effect on integer values
-    >>> format_bytes(1000, digits=1)
-    '1000b'
+        >>> format_bytes(512+1024)
+        '1.50Kb'
+
+        >>> format_bytes(1024*1024*1.25)
+        '1.25Mb'
+
+        Digits defaults to 2, but can be specified.
+
+        >>> format_bytes(512+1024, digits=1)
+        '1.5Kb'
+
+        The number of digits does not have an effect on integer values
+
+        >>> format_bytes(1000, digits=1)
+        '1000b'
 
     """
     negative = n < 0
@@ -52,34 +63,44 @@ def format_bytes(n: Number, digits: int = 2) -> str:
     return f"{prefix}{value:.{digits}f}{units[i]}"
 
 
-def parse_bytes(bytes_str) -> int:
+def parse_bytes(bytes_str: str) -> int:
     """
     Parse the given string into the number of bytes.
-    >>> parse_bytes('10b')
-    10
 
-    >>> parse_bytes('1.50Kb')
-    1536
+    Args:
+        bytes_str: The string to convert to the number of bits.
 
-    >>> parse_bytes('1.25Mb')
-    1310720
+    Returns:
+        The number of bits represented.
 
-    >>> parse_bytes('1250Kb')
-    1280000
+    Examples:
+        >>> parse_bytes('10b')
+        10
 
-    >>> parse_bytes('0.025Kb')
-    26
+        >>> parse_bytes('1.50Kb')
+        1536
 
-    Works with output of format bytes
-    >>> parse_bytes(format_bytes(512+1024))
-    1536
+        >>> parse_bytes('1.25Mb')
+        1310720
 
-    >>> parse_bytes(format_bytes(512+1024, digits=1))
-    1536
+        >>> parse_bytes('1250Kb')
+        1280000
 
-    Provides the cailing of any fractions:
-    >>> parse_bytes('1.1b')
-    2
+        >>> parse_bytes('0.025Kb')
+        26
+
+        Works with output of format bytes
+
+        >>> parse_bytes(format_bytes(512+1024))
+        1536
+
+        >>> parse_bytes(format_bytes(512+1024, digits=1))
+        1536
+
+        Provides the cailing of any fractions:
+
+        >>> parse_bytes('1.1b')
+        2
 
     """
     values = dict(
@@ -110,20 +131,28 @@ def parse_bytes(bytes_str) -> int:
 def count_digits(num: int) -> int:
     """
     Counts the number of digits in an integer:
-    >>> count_digits(1), count_digits(2)
-    (1, 1)
 
-    >>count_digits(10), count_digits(12)
-    (2, 2)
+    Args:
+        num: The number to count the difits of.
 
-    >>count_digits(100), count_digits(314)
-    (3, 3)
+    Returns:
+        The number of digits needed to represent num.
 
-    >>count_digits(-100), count_digits(-10)
-    (3, 2)
+    Examples:
+        >>> count_digits(1), count_digits(2)
+        (1, 1)
 
-    >>> count_digits(0)
-    1
+        >>> count_digits(10), count_digits(12)
+        (2, 2)
+
+        >>> count_digits(100), count_digits(314)
+        (3, 3)
+
+        >>> count_digits(-100), count_digits(-10)
+        (3, 2)
+
+        >>> count_digits(0)
+        1
     """
     digits = 1
     num = abs(num) // 10
@@ -135,15 +164,28 @@ def count_digits(num: int) -> int:
 
 def slice_len(slc: slice) -> int:
     """
-    Returns the length of a slice
-    >>> slice_len(slice(5))
-    5
+    Returns the length of a slice.
 
-    >>> slice_len(slice(1, 5))
-    4
+    Args:
+        slc: The slice to calculate the length of.
+             This is taken as a literal number.
+             Weird results may occur if negatives are used.
 
-    >>> slice_len(slice(1, 5, 2))
-    2
+    Returns:
+        The number of items in the slice, if it can expand endlessly.
+
+    Examples:
+        >>> slice_len(slice(5))
+        5
+
+        >>> slice_len(slice(1, 5))
+        4
+
+        >>> slice_len(slice(1, 5, 2))
+        2
+
+        >>> slice_len(slice(1, -5, 2))
+        -3
     """
     inc = slc.step or 1
 
@@ -154,15 +196,24 @@ def slice_len(slc: slice) -> int:
 
 def slice_range(slc: slice) -> range:
     """
-    Returns the range of the slice:
-    >>> slice_range(slice(5))
-    range(0, 5)
+    Returns the range of the slice.
+    Note that this is different to slice.indices(len) in that it does not take a length.
 
-    >>> slice_range(slice(1, 5))
-    range(1, 5)
+    Args:
+        slc: The slice to wrap in a range.
 
-    >>> slice_range(slice(1, 5, 2))
-    range(1, 5, 2)
+    Returns:
+        A range object covering the slice.
+
+    Examples:
+        >>> slice_range(slice(5))
+        range(0, 5)
+
+        >>> slice_range(slice(1, 5))
+        range(1, 5)
+
+        >>> slice_range(slice(1, 5, 2))
+        range(1, 5, 2)
     """
     if slc.start is None and slc.step is None:
         return range(slc.stop)
@@ -251,17 +302,26 @@ def iterate(array: np.ndarray, axis=None) -> Iterator[np.ndarray]:
 def reduce_shape(shape: Shape, axis=None) -> Shape:
     """
     Returns the data shape for the given axis.
-    >>> reduce_shape((1,2,3))
-    (1, 2, 3)
 
-    >>> reduce_shape((1,2,3), axis=-1)
-    (1, 2)
+    Args:
+        shape: The initial shape to be reduced from.
+        axis: The axis to remove.
 
-    >>> reduce_shape((1,2,3), axis=0)
-    (2, 3)
+    Returns:
+        The new shape with all the axis removed.
 
-    >>> reduce_shape((1,2,3), axis=(0, -1))
-    (2,)
+    Examples:
+        >>> reduce_shape((1,2,3))
+        (1, 2, 3)
+
+        >>> reduce_shape((1,2,3), axis=-1)
+        (1, 2)
+
+        >>> reduce_shape((1,2,3), axis=0)
+        (2, 3)
+
+        >>> reduce_shape((1,2,3), axis=(0, -1))
+        (2,)
     """
     if axis is None:
         return shape
@@ -285,6 +345,14 @@ class FileGuard(AbstractContextManager):
         delete_on_failure: bool = True,
         check_exist_on_success: bool = True,
     ):
+        """
+        Args:
+            paths: The paths to be gaurded.
+            delete_on_failure: Whether to deleted the guarded paths
+                               if an error occurs in the context.
+            check_exist_on_success: Whether to assert that the guarded paths
+                                    exist after the context successfully completes.
+        """
         self.paths = paths
         self.delete_on_failure = delete_on_failure
         self.check_exist_on_success = check_exist_on_success
@@ -313,17 +381,26 @@ def simplify_chunks(
     """
     Returns the simplified chunks representation (tuple[int,...]) from the given chunks.
     Asserts that all the values for each dimension are the same, except the last.
-    >>> simplify_chunks((1,2,3))
-    (1, 2, 3)
 
-    >>> simplify_chunks(((1,), (2,), (3,)))
-    (1, 2, 3)
+    Args:
+        chunks: Chunks represented by individual lengths in each dimension,
+                spanning the whole space. As returned by something like Dask.
 
-    >>> simplify_chunks(((1,1), (2,2), (3,3)))
-    (1, 2, 3)
+    Returns:
+        A simplified representation, where each dimension has a single number.
 
-    >>> simplify_chunks(((1,1), (2,1), (3,1)))
-    (1, 2, 3)
+    Examples:
+        >>> simplify_chunks((1,2,3))
+        (1, 2, 3)
+
+        >>> simplify_chunks(((1,), (2,), (3,)))
+        (1, 2, 3)
+
+        >>> simplify_chunks(((1,1), (2,2), (3,3)))
+        (1, 2, 3)
+
+        >>> simplify_chunks(((1,1), (2,1), (3,1)))
+        (1, 2, 3)
 
     """
     result = []
