@@ -1,6 +1,9 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
+import sys
+from xarray.testing import assert_identical
+from xartus.lib.h5_printer import print_group
 from pathlib import Path
 import h5py
 from xartus.lib.utils import FileGuard, FileAction, DeferredAction
@@ -14,6 +17,21 @@ from xartus.lib.data_source import Axis, AxisType
 from xartus.api import data_convert
 
 import pytest
+
+
+def assert_equal_recursive(actual, expected):
+    if isinstance(actual, np.ndarray) and isinstance(expected, np.ndarray):
+        np.testing.assert_array_equal(actual, expected)
+    elif isinstance(actual, dict) and isinstance(expected, dict):
+        assert actual.keys() == expected.keys()
+        for key in actual:
+            assert_equal_recursive(actual[key], expected[key])
+    elif isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
+        assert len(actual) == len(expected)
+        for a, e in zip(actual, expected, strict=True):
+            assert_equal_recursive(a, e)
+    else:
+        assert actual == expected
 
 
 @pytest.fixture(scope="module")
@@ -65,13 +83,13 @@ def test_dataarray_there_and_back():
             grp = fle.create_group("/entry/")
             grp.attrs["NX_class"] = "NXentry"
 
-        initial_da.nexus.write_to(path, "/entry/")
+        initial_da.nexus.write_to(path, "/entry/cats/")
         assert path.exists()
 
-        final_da = xr.open_dataarray(path, engine="nexus", entry_path="/entry/ints")
+        final_da = xr.open_dataarray(path, engine="nexus", entry_path="/entry/cats")
         defer.on_complete(final_da.close)
 
-        assert initial_da == final_da
+        assert_identical(initial_da, final_da)
 
 
 def test_dataset_there_and_back():
@@ -103,16 +121,16 @@ def test_dataset_there_and_back():
     path = Path("./test.nxs")
     with FileGuard(path, on_complete=FileAction.DELETE), DeferredAction() as defer:
         with h5py.File(path, "w") as fle:
-            grp = fle.create_group("/entry/")
-            grp.attrs["NX_class"] = "NXentry"
+            fle["/"].attrs["NX_class"] = "NXroot"
 
         initial_ds.nexus.write_to(path, "/entry/")
+
         assert path.exists()
 
         final_ds = xr.open_dataset(path, engine="nexus", entry_path="/entry/")
         defer.on_complete(final_ds.close)
 
-        assert initial_ds == final_ds
+        assert_identical(initial_ds, final_ds)
 
 
 def test_datatree_there_and_back():
@@ -144,27 +162,61 @@ def test_datatree_there_and_back():
                     attrs={"min": 0, "max": 1},
                 ),
             }
-        )
+        ),
+        children={
+            "child": xr.DataTree(
+                xr.Dataset(
+                    {
+                        "sub_int": xr.DataArray(
+                            ints,
+                            dims=dims,
+                            coords={
+                                key: np.arange(s)
+                                for key, s in zip(dims, shape, strict=True)
+                            },
+                            attrs={"min": 0, "max": np.prod(shape)},
+                        ),
+                        "sub_fractions": xr.DataArray(
+                            fractions,
+                            dims=dims,
+                            coords={
+                                key: np.arange(s)
+                                for key, s in zip(dims, shape, strict=True)
+                            },
+                            attrs={"min": 0, "max": 1},
+                        ),
+                    }
+                )
+            ),
+            "params": xr.DataTree(
+                xr.Dataset(attrs={"NX_class": "NXparameters", "python": sys.version})
+            ),
+        },
     )
 
     path = Path("./test.nxs")
     with FileGuard(path, on_complete=FileAction.DELETE), DeferredAction() as defer:
-        initial_dt.nexus.write(path)
+        initial_dt.nexus.write_to(path)
         assert path.exists()
 
         final_dt = xr.open_datatree(path, engine="nexus")
         defer.on_complete(final_dt.close)
 
-        assert initial_dt == final_dt
+        assert_identical(initial_dt, final_dt)
 
 
 def test_nexus_there_and_back(man_data_and_nexus):
     nx_file = man_data_and_nexus[1]
 
+    with h5py.File(nx_file, "r") as fle:
+        print_group(fle)
+
     path = Path("./test.nxs")
     with FileGuard(path, on_complete=FileAction.DELETE), DeferredAction() as defer:
         dt = xr.open_datatree(nx_file, engine="nexus")
         defer.on_complete(dt.close)
+        dt.nexus.write_to(path)
+        assert path.exists()
 
         def compare(nxe, fle):
             initial_names = list(nxe)
@@ -176,7 +228,17 @@ def test_nexus_there_and_back(man_data_and_nexus):
                 initial_entry = nxe[name]
                 final_entry = fle[name]
 
-                assert dict(initial_entry.attrs) == dict(final_entry.attrs)
+                initial_attrs = dict(initial_entry.attrs)
+                final_attrs = dict(final_entry.attrs)
+                try:
+                    assert_equal_recursive(initial_attrs, final_attrs)
+                except AssertionError as e:
+                    message = f"Expected {initial_entry.name} to have same attrs as {final_entry.name}. But found a difference."
+                    print("initial_attrs: ", file=sys.stderr)
+                    print(initial_attrs, file=sys.stderr)
+                    print("final_attrs: ", file=sys.stderr)
+                    print(final_attrs, file=sys.stderr)
+                    raise AssertionError(message) from e
 
                 if isinstance(initial_entry, h5py.Dataset):
                     assert isinstance(final_entry, h5py.Dataset)
@@ -185,9 +247,6 @@ def test_nexus_there_and_back(man_data_and_nexus):
                     assert isinstance(initial_entry, h5py.Group)
                     assert isinstance(final_entry, h5py.Group)
                     compare(initial_entry, final_entry)
-
-        dt.nexus.write(path)
-        assert path.exists()
 
         with h5py.File(nx_file, "r") as nxe, h5py.File(path, "r") as fle:
             compare(fle, nxe)

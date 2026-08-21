@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 
+from xartus.lib.utils import DeferredAction
 from pathlib import Path
 from .exceptions import InvalidEntryError
 from typing import Any, Iterable
@@ -10,53 +11,225 @@ import dask.array as da
 import h5py
 import xarray as xr
 from xarray.backends import BackendEntrypoint
+import numpy as np
+
+
+def _write_dataarray(dataarray: xr.DataArray, group: h5py.Group, name: str) -> None:
+    nx_data: h5py.Group = group.create_group(name)
+    nx_data.attrs["NX_class"] = "NXdata"
+
+    for k, v in dataarray.attrs.items():
+        nx_data.attrs[k] = v
+
+    signal = nx_data.create_dataset(
+        dataarray.name,
+        shape=dataarray.shape,
+        dtype=dataarray.dtype,
+        chunks=dataarray.chunks,
+    )
+    nx_data.attrs["signal"] = dataarray.name
+
+    chunks = dataarray.shape if dataarray.chunks is None else dataarray.chunks
+    if isinstance(dataarray.data, da.Array):
+        a = dataarray.data
+    else:
+        a = da.from_array(dataarray.data, chunks=chunks)
+    a.store(signal, lock=True, compute=True)
+
+    nx_data.attrs["axes"] = list(dataarray.dims)
+
+    for coord in dataarray.coords.values():
+        indices = [int(ii) for ii, d in enumerate(dataarray.dims) if d in coord.dims]
+        nx_data.attrs[f"{coord.name}_indices"] = indices
+        axis = nx_data.create_dataset(
+            coord.name,
+            shape=coord.shape,
+            dtype=coord.dtype,
+            chunks=coord.chunks,
+        )
+        chunks = coord.shape if coord.chunks is None else coord.chunks
+        if isinstance(coord.data, da.Array):
+            a = coord.data
+        else:
+            a = da.from_array(coord.data, chunks=chunks)
+        a.store(
+            axis,
+            lock=True,
+            compute=True,
+        )
+
+        for k, v in coord.attrs.items():
+            axis.attrs[k] = v
+
+
+def _write_dataset(
+    dataset: xr.Dataset | xr.DataTree, group: h5py.Group, nx_class
+) -> None:
+    attrs = dict(dataset.attrs)
+    attrs["NX_class"] = nx_class
+    for k, v in attrs.items():
+        group.attrs[k] = v
+    for name, var in dataset.data_vars.items():
+        _write_dataarray(var, group, str(name))
+
+
+def _write_datatree(datatree: xr.DataTree, group: h5py.Group, nx_class) -> None:
+    if "NX_class" in datatree.attrs:
+        nx_class = datatree.attrs["NX_class"]
+        if nx_class not in ("NXentry", "NXsubentry") and datatree.has_data:
+            msg = f"Expected tree node {group.name} with class {nx_class} to not have any data."
+            raise InvalidEntryError(msg)
+    _write_dataset(datatree, group, nx_class)
+    nx_class = "NXentry" if nx_class == "NXroot" else "NXsubentry"
+    for name, child in datatree.children.items():
+        sub_group = group.create_group(name)
+        _write_datatree(child, sub_group, nx_class)
 
 
 @xr.register_dataarray_accessor("nexus")
 class NexusDataArray:
-    def __init__(self, xarray_obj):
-        self.data = xarray_obj
+    """
+    Provides the DataArray.nexus object.
+    """
 
-    def write_to(self, path: Path, entry_path: str) -> None:
-        pass
+    def __init__(self, xarray_obj: xr.DataArray):
+        self.dataarray = xarray_obj
+
+    def write_to(self, filename_or_obj: Path | h5py.File, data_path: str) -> None:
+        """
+        Write the given DataArray to the NeXus file at the given entry_path.
+
+        Creates an NXdata and writes each the signal and coords.
+        This expects the parent path to be an NXentry or NXsubentry
+
+        Args:
+            filename_or_obj: The NeXus file to write to.
+            data_path: The path of the entry to create.
+        """
+        with DeferredAction() as defer:
+            if isinstance(filename_or_obj, h5py.File):
+                nx_file = filename_or_obj
+            else:
+                nx_file = h5py.File(filename_or_obj, "a")
+                defer.on_complete(nx_file.close)
+            filename = nx_file.filename
+
+            parts = data_path.removesuffix("/").split("/")
+            name = parts[-1]
+            base_path = "/".join(parts[:-1]) + "/"
+
+            if "NX_class" not in nx_file[base_path].attrs:
+                message = f"Expected {filename}:{base_path} to have NX_class."
+                raise InvalidEntryError(message)
+            if nx_file[base_path].attrs["NX_class"] not in ("NXentry", "NXsubentry"):
+                message = (
+                    f"Expected {filename}:{base_path} to be file NXentry or NXsubentry."
+                )
+                raise InvalidEntryError(message)
+
+            _write_dataarray(self.dataarray, nx_file[base_path], name)
 
 
 @xr.register_dataset_accessor("nexus")
 class NexusDataset:
     """
-    Provides the dataset.nexus object.
+    Provides the Dataset.nexus object.
     """
 
-    def __init__(self, xarray_obj):
+    def __init__(self, xarray_obj: xr.Dataset):
         self.dataset = xarray_obj
 
     def write_to(
         self, filename_or_obj: Path | h5py.File, entry_path: str = "/"
     ) -> None:
         """
-        Write the given dataset to the NeXus file at the given entry_path.
+        Write the given Dataset to the NeXus file at the given entry_path.
 
         Creates an NXentry or NXsubentry and writes each array as a NXdata.
-        If the path is the root a NXentry is created.
-        If the path is a NXentry or NXsubentry a NXsubentry is created.
-        If the path is anything else an exception is raised
+        If the parent path is the root a NXentry is created.
+        If the parent path is a NXentry or NXsubentry a NXsubentry is created.
+        If the parent path is anything else an exception is raised
 
         Args:
             filename_or_obj: The NeXus file to write to.
             entry_path: The path of the entry to create.
         """
+        with DeferredAction() as defer:
+            if isinstance(filename_or_obj, h5py.File):
+                nx_file = filename_or_obj
+            else:
+                nx_file = h5py.File(filename_or_obj, "a")
+                defer.on_complete(nx_file.close)
+            filename = nx_file.filename
+
+            base_path = "/".join(entry_path.removesuffix("/").split("/")[:-1]) + "/"
+
+            if "NX_class" not in nx_file[base_path].attrs:
+                if nx_file[base_path].name != "/":
+                    message = f"Expected {filename}:{base_path} to be file root or have NX_class."
+                    raise InvalidEntryError(message)
+                nx_class = "NXroot"
+            else:
+                nx_class = nx_file[base_path].attrs["NX_class"]
+
+            if nx_class not in ("NXroot", "NXentry", "NXsubentry"):
+                message = f"Expected {filename}:{base_path} to be file NXroot, NXentry or NXsubentry."
+                raise InvalidEntryError(message)
+
+            nx_class = "NXentry" if nx_class == "NXroot" else "NXsubentry"
+            group: h5py.Group = nx_file.create_group(entry_path)
+            _write_dataset(self.dataset, group, nx_class)
 
 
 @xr.register_datatree_accessor("nexus")
 class NexusDataTree:
-    def __init__(self, xarray_obj):
-        self.data = xarray_obj
+    """
+    Provides the DataTree.nexus object.
+    """
 
-    def write(self, path: Path) -> None:
-        pass
+    def __init__(self, xarray_obj: xr.DataTree):
+        self.datatree = xarray_obj
 
-    def write_to(self, path: Path, entry_path: str) -> None:
-        pass
+    def write_to(
+        self, filename_or_obj: Path | h5py.File, root_path: str = "/", mode="a"
+    ) -> None:
+        """
+        Write the given DataTree to the NeXus file rooted at the given root_path.
+
+        Creates an NXentry or NXsubentry and writes each array as a NXdata.
+        If the parent path is the root a NXentry is created.
+        If the parent path is a NXentry or NXsubentry a NXsubentry is created.
+        If the parent path is anything else an exception is raised
+
+        Args:
+            filename_or_obj: The NeXus file to write to.
+            root_path: The path to the root of the tree.
+            mode: The mode to open the file with if filename_or_obj is a path.
+        """
+        if mode not in ("r+", "w", "w-", "x", "a"):
+            raise ValueError("Expected mode to be one of r+, w, w- or x, or a")
+        with DeferredAction() as defer:
+            if isinstance(filename_or_obj, h5py.File):
+                nx_file = filename_or_obj
+            else:
+                nx_file = h5py.File(filename_or_obj, mode)
+                defer.on_complete(nx_file.close)
+            filename = nx_file.filename
+
+            if "NX_class" not in nx_file[root_path].attrs:
+                if nx_file[root_path].name != "/":
+                    message = f"Expected {filename}:{root_path} to be file root or have NX_class."
+                    raise InvalidEntryError(message)
+                nx_class = "NXroot"
+            else:
+                nx_class = nx_file[root_path].attrs["NX_class"]
+
+            if nx_class not in ("NXroot", "NXentry", "NXsubentry"):
+                message = f"Expected {filename}:{root_path} to be file NXroot, NXentry or NXsubentry."
+                raise InvalidEntryError(message)
+
+            group = nx_file[root_path]
+            _write_datatree(self.datatree, group, nx_class)
 
 
 def insert_into_axes(axes: list[str], axis: list[str]) -> list[str]:
@@ -284,7 +457,7 @@ class NexusEntrypoint(BackendEntrypoint):
                 del path_attrs[index_path]
 
                 inx = self.nx_file[data_path].attrs[index_path]
-                if isinstance(inx, int):
+                if isinstance(inx, np.integer):
                     inx = [inx]
                 if not isinstance(inx, Iterable):
                     raise TypeError(
@@ -328,7 +501,7 @@ class NexusEntrypoint(BackendEntrypoint):
 
         root_attrs = dict(self.nx_file[entry_path].attrs)
         if "NX_class" not in self.nx_file[entry_path].attrs:
-            if "HDF5_Version" not in self.nx_file[entry_path].attrs:
+            if self.nx_file[entry_path].name != "/":
                 message = f"Expected {self.filename}:{entry_path} to be file root or have NX_class."
                 raise InvalidEntryError(message)
         elif self.nx_file[entry_path].attrs["NX_class"] not in (
