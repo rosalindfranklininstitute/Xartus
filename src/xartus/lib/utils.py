@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
+from typing import Callable
+from enum import Enum
 from pathlib import Path
 from contextlib import AbstractContextManager
 
@@ -332,6 +334,12 @@ def reduce_shape(shape: Shape, axis=None) -> Shape:
     return Shape(v for ii, v in enumerate(shape) if ii not in axis)
 
 
+class FileAction(Enum):
+    DO_NOTHING = "do_nothing"
+    DELETE = "delete"
+    CHECK_EXISTS = "check_exists"
+
+
 class FileGuard(AbstractContextManager):
     """
     This context takes in a collection and checks their state after the block runs.
@@ -342,35 +350,101 @@ class FileGuard(AbstractContextManager):
     def __init__(
         self,
         *paths: Path,
-        delete_on_failure: bool = True,
-        check_exist_on_success: bool = True,
+        on_failure: FileAction = FileAction.DO_NOTHING,
+        on_success: FileAction = FileAction.DO_NOTHING,
+        on_complete: FileAction = FileAction.DO_NOTHING,
     ):
         """
         Args:
             paths: The paths to be gaurded.
-            delete_on_failure: Whether to deleted the guarded paths
-                               if an error occurs in the context.
-            check_exist_on_success: Whether to assert that the guarded paths
-                                    exist after the context successfully completes.
+            on_failure: What action to take if an error occurs in the context.
+            on_success: What action to take the completes without an error.
+            on_complete: What action to when the context completes (with or without an error)
+
+        Note:
+            on_complete is executed after either on_failure or on_success. So if either is DELETE and on_complete is CHECK_EXISTS it will fail.
         """
         self.paths = paths
-        self.delete_on_failure = delete_on_failure
-        self.check_exist_on_success = check_exist_on_success
+        self.on_failure = on_failure
+        self.on_success = on_success
+        self.on_complete = on_complete
 
     def __enter__(self):
         pass
 
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type is not None:
-            if self.delete_on_failure:
+            self._perform_action(self.on_failure)
+        else:
+            self._perform_action(self.on_success)
+
+        self._perform_action(self.on_complete)
+
+        return False
+
+    def _perform_action(self, action: FileAction) -> None:
+        match action:
+            case FileAction.CHECK_EXISTS:
+                nonexisting_files = [
+                    str(path) for path in self.paths if not path.exists()
+                ]
+                if len(nonexisting_files) != 0:
+                    raise FileNotFoundError(
+                        f"Expected the following files to exists, but did not: {', '.join(nonexisting_files)}"
+                    )
+            case FileAction.DELETE:
                 for path in self.paths:
                     path.unlink(missing_ok=True)
-        elif self.check_exist_on_success:
-            nonexisting_files = [str(path) for path in self.paths if not path.exists()]
-            if len(nonexisting_files) != 0:
-                raise FileNotFoundError(
-                    f"Expected the following files to exists, but did not: {', '.join(nonexisting_files)}"
-                )
+            case FileAction.DO_NOTHING:
+                pass
+
+
+class DeferredAction(AbstractContextManager):
+    """
+    This context allows actions to be registered that should be executed when the context ends.
+
+    Actions may be registered to execute if:
+      - an error occurs (on_failure)
+      - no error occurs (on_success)
+      - always, regardless of whether a car succeeds. (on_complete)
+
+    Functions are executed in the order that they are registered.
+
+    Note:
+        on_complete is executed after either on_failure or on_success.
+        Thus if the on_failure/on_success performs should not perform any action that will make an on_complete fail.
+        For example if on_failure is used to delete a file,
+        and on_success is used to check its existence, the on_success will fail whenever the context fails.
+    """
+
+    def __init__(
+        self,
+    ):
+        self.failure_funcs = []
+        self.success_funcs = []
+        self.complete_funcs = []
+
+    def __enter__(self):
+        return self
+
+    def on_failure(self, func: Callable[[], Any]) -> None:
+        self.failure_funcs.append(func)
+
+    def on_success(self, func: Callable[[], Any]) -> None:
+        self.success_funcs.append(func)
+
+    def on_complete(self, func: Callable[[], Any]) -> None:
+        self.complete_funcs.append(func)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type is not None:
+            for func in self.failure_funcs:
+                func()
+        else:
+            for func in self.success_funcs:
+                func()
+        for func in self.complete_funcs:
+            func()
 
         return False
 

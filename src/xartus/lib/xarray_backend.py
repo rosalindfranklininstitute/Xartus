@@ -4,14 +4,59 @@
 
 from pathlib import Path
 from .exceptions import InvalidEntryError
-from typing import Any, Iterable, cast
+from typing import Any, Iterable
 
 import dask.array as da
 import h5py
 import xarray as xr
 from xarray.backends import BackendEntrypoint
 
-from icecream import ic
+
+@xr.register_dataarray_accessor("nexus")
+class NexusDataArray:
+    def __init__(self, xarray_obj):
+        self.data = xarray_obj
+
+    def write_to(self, path: Path, entry_path: str) -> None:
+        pass
+
+
+@xr.register_dataset_accessor("nexus")
+class NexusDataset:
+    """
+    Provides the dataset.nexus object.
+    """
+
+    def __init__(self, xarray_obj):
+        self.dataset = xarray_obj
+
+    def write_to(
+        self, filename_or_obj: Path | h5py.File, entry_path: str = "/"
+    ) -> None:
+        """
+        Write the given dataset to the NeXus file at the given entry_path.
+
+        Creates an NXentry or NXsubentry and writes each array as a NXdata.
+        If the path is the root a NXentry is created.
+        If the path is a NXentry or NXsubentry a NXsubentry is created.
+        If the path is anything else an exception is raised
+
+        Args:
+            filename_or_obj: The NeXus file to write to.
+            entry_path: The path of the entry to create.
+        """
+
+
+@xr.register_datatree_accessor("nexus")
+class NexusDataTree:
+    def __init__(self, xarray_obj):
+        self.data = xarray_obj
+
+    def write(self, path: Path) -> None:
+        pass
+
+    def write_to(self, path: Path, entry_path: str) -> None:
+        pass
 
 
 def insert_into_axes(axes: list[str], axis: list[str]) -> list[str]:
@@ -66,6 +111,53 @@ class NexusEntrypoint(BackendEntrypoint):
     def __del__(self):
         self._close()
 
+    def open_dataarray(
+        self,
+        filename_or_obj,
+        *,
+        drop_variables=None,
+        data_path: None | str = None,
+    ) -> xr.DataArray:
+        """
+        Opens the specified NXdata and returns it as the sole data array on a dataset.
+
+        Args:
+            filename_or_obj: The path to the file to read, or the file itself.
+            drop_variables: Unused
+            entry_path: The path within the file to read.
+                        If None, the default entry is used.
+
+        Returns:
+            Returns a xarray.Dataset containing a data array.
+        """
+        # TODO (dmd): implement this
+        # https://github.com/pydata/xarray/issues/10562
+        raise NotImplementedError()
+        try:
+            should_close = self._open(filename_or_obj)
+            assert self.nx_file is not None
+
+            if data_path is None:
+                path = "/"
+                while "signal" not in self.nx_file[path].attrs:
+                    if "default" not in self.nx_file[path].attrs:
+                        raise InvalidEntryError("Could not find default signal.")
+                    path = f"{path.removesuffix('/')}/{self.nx_file[path].attrs['default']}"
+                if "signal" not in self.nx_file[path].attrs:
+                    raise InvalidEntryError("Could not find default signal.")
+                data_path = path
+
+            darray = self._read_nxdata(data_path)
+
+            if should_close:
+                darray.set_close(self._close)
+
+        except:
+            self._close()
+            raise
+        else:
+            return darray
+
     def open_dataset(
         self,
         filename_or_obj,
@@ -99,14 +191,14 @@ class NexusEntrypoint(BackendEntrypoint):
                     raise InvalidEntryError("Could not find default signal.")
                 entry_path = path
 
-            entries: dict[str, xr.DataArray] = {}
-
-            # TODO (dmd): Do I want to read all the data on the entry?
-            # https://example.com
-            entry_array = self._read_nxdata(entry_path)
-            entries[cast(str, entry_array.name)] = entry_array
-
-            ds = xr.Dataset(data_vars=entries)
+            if (
+                "NX_class" in self.nx_file[entry_path].attrs
+                and self.nx_file[entry_path].attrs["NX_class"] == "NXdata"
+            ):
+                darray = self._read_nxdata(entry_path)
+                ds = xr.Dataset({darray.name: darray})
+            else:
+                ds = self._read_all_data_on_nxentry(entry_path)
 
             if should_close:
                 ds.set_close(self._close)
@@ -240,12 +332,11 @@ class NexusEntrypoint(BackendEntrypoint):
                 message = f"Expected {self.filename}:{entry_path} to be file root or have NX_class."
                 raise InvalidEntryError(message)
         elif self.nx_file[entry_path].attrs["NX_class"] not in (
+            "NXroot",
             "NXentry",
             "NXsubentry",
         ):
-            message = (
-                f"Expected {self.filename}:{entry_path} to be NXentry or NXsubentry."
-            )
+            message = f"Expected {self.filename}:{entry_path} to be NXroot, NXentry or NXsubentry."
             raise InvalidEntryError(message)
         else:
             del root_attrs["NX_class"]
@@ -256,7 +347,6 @@ class NexusEntrypoint(BackendEntrypoint):
 
         for path in self.nx_file[entry_path]:
             sub_path = f"{base_path}/{path}"
-            ic(base_path, path, sub_path)
             nx_class = self.nx_file[sub_path].attrs["NX_class"]
             if nx_class == "NXdata":
                 entry_array = self._read_nxdata(sub_path)
@@ -283,7 +373,6 @@ class NexusEntrypoint(BackendEntrypoint):
             self.filename = filename_or_obj.filename
         else:
             self.nx_file = h5py.File(filename_or_obj, "r")
-            ic("open file", filename_or_obj, self.nx_file)
             self.filename = filename_or_obj
         return should_close
 
@@ -291,6 +380,7 @@ class NexusEntrypoint(BackendEntrypoint):
         if self.nx_file is not None:
             self.nx_file.close()
 
+    open_dataarray_parameters = ["filename_or_obj", "drop_variables", "data_path"]
     open_dataset_parameters = ["filename_or_obj", "drop_variables", "entry_path"]
     open_datatree_parameters = ["filename_or_obj", "drop_variables", "root"]
 

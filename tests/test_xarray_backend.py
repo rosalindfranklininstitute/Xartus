@@ -43,6 +43,48 @@ def man_data_and_nexus():
     filename.unlink()
 
 
+def test_default_dataarray(man_data_and_nexus):
+    nx_file = man_data_and_nexus[1]
+
+    da = xr.open_dataarray(nx_file, engine="nexus")
+
+    assert da is not None
+    assert isinstance(da, xr.DataArray)
+
+    assert da.name == "signal"
+    assert "x" in da.coords
+    assert "y" in da.coords
+    assert "mz" in da.coords
+    assert "time" in da.coords
+    assert "error" in da.coords
+    assert "x" in da.dims
+    assert "y" in da.dims
+    assert "mz" in da.dims
+
+    da.close()
+
+
+def test_specific_dataarray(man_data_and_nexus):
+    nx_file = man_data_and_nexus[1]
+
+    da = xr.open_dataarray(nx_file, engine="nexus", entry_path="/entry/images/data")
+
+    assert da is not None
+    assert isinstance(da, xr.DataArray)
+
+    assert da.name == "signal"
+    assert "x" in da.coords
+    assert "y" in da.coords
+    assert "mz" in da.coords
+    assert "time" in da.coords
+    assert "error" in da.coords
+    assert "x" in da.dims
+    assert "y" in da.dims
+    assert "mz" in da.dims
+
+    da.close()
+
+
 def test_default_dataset(man_data_and_nexus):
     nx_file = man_data_and_nexus[1]
 
@@ -67,12 +109,12 @@ def test_default_dataset(man_data_and_nexus):
 def test_specific_dataset(man_data_and_nexus):
     nx_file = man_data_and_nexus[1]
 
-    ds = xr.open_dataset(nx_file, engine="nexus", entry_path="/entry/images/data")
+    ds = xr.open_dataset(nx_file, engine="nexus", entry_path="/entry/images/")
 
     assert ds is not None
     assert isinstance(ds, xr.Dataset)
 
-    assert "signal" in ds
+    assert "data" in ds
     assert "x" in ds.coords
     assert "y" in ds.coords
     assert "mz" in ds.coords
@@ -85,6 +127,9 @@ def test_specific_dataset(man_data_and_nexus):
     ds.close()
 
 
+@pytest.mark.skip(
+    reason="Specific dataarray backends are not, yet, supported by xarray."
+)
 def test_error_on_load_non_nxdata_dataset(man_data_and_nexus):
     nx_file = man_data_and_nexus[1]
 
@@ -137,6 +182,6 @@ def test_error_on_load_non_nxentry_datatree(man_data_and_nexus):
     nx_file = man_data_and_nexus[1]
 
     with pytest.raises(
-        InvalidEntryError, match="Expected .* to be NXentry or NXsubentry"
+        InvalidEntryError, match="Expected .* to be NXroot, NXentry or NXsubentry"
     ):
         xr.open_datatree(nx_file, engine="nexus", root="/entry/images/data")

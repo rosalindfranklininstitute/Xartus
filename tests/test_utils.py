@@ -6,23 +6,23 @@ import re
 
 import pytest
 
-from xartus import lib as mnxlib
+from xartus.lib.utils import FileAction, FileGuard, count_digits
 
 
 def test_count_digits():
-    assert mnxlib.utils.count_digits(0) == 1
+    assert count_digits(0) == 1
 
-    assert mnxlib.utils.count_digits(1) == 1
-    assert mnxlib.utils.count_digits(11) == 2
-    assert mnxlib.utils.count_digits(111) == 3
-    assert mnxlib.utils.count_digits(1111) == 4
-    assert mnxlib.utils.count_digits(11111) == 5
+    assert count_digits(1) == 1
+    assert count_digits(11) == 2
+    assert count_digits(111) == 3
+    assert count_digits(1111) == 4
+    assert count_digits(11111) == 5
 
-    assert mnxlib.utils.count_digits(-1) == 1
-    assert mnxlib.utils.count_digits(-11) == 2
-    assert mnxlib.utils.count_digits(-111) == 3
-    assert mnxlib.utils.count_digits(-1111) == 4
-    assert mnxlib.utils.count_digits(-11111) == 5
+    assert count_digits(-1) == 1
+    assert count_digits(-11) == 2
+    assert count_digits(-111) == 3
+    assert count_digits(-1111) == 4
+    assert count_digits(-11111) == 5
 
 
 def test_file_guard_delete():
@@ -30,9 +30,7 @@ def test_file_guard_delete():
     filename = Path(__file__).parent / "test.txt"
     filename.unlink(missing_ok=True)
 
-    with mnxlib.utils.FileGuard(
-        filename, delete_on_failure=True, check_exist_on_success=False
-    ):
+    with FileGuard(filename, on_failure=FileAction.DELETE):
         filename.touch()
 
     assert filename.exists()
@@ -40,9 +38,7 @@ def test_file_guard_delete():
 
     with (
         pytest.raises(RuntimeError, match="Error!"),
-        mnxlib.utils.FileGuard(
-            filename, delete_on_failure=True, check_exist_on_success=False
-        ),
+        FileGuard(filename, on_failure=FileAction.DELETE),
     ):
         filename.touch()
         assert filename.exists()
@@ -53,8 +49,10 @@ def test_file_guard_delete():
     filename2 = Path(__file__).parent / "test2.txt"
     filename2.unlink(missing_ok=True)
 
-    with mnxlib.utils.FileGuard(
-        filename, filename2, delete_on_failure=True, check_exist_on_success=False
+    with FileGuard(
+        filename,
+        filename2,
+        on_failure=FileAction.DELETE,
     ):
         filename.touch()
         filename2.touch()
@@ -65,9 +63,7 @@ def test_file_guard_delete():
 
     with (
         pytest.raises(RuntimeError, match="Error!"),
-        mnxlib.utils.FileGuard(
-            filename, filename2, delete_on_failure=True, check_exist_on_success=False
-        ),
+        FileGuard(filename, filename2, on_failure=FileAction.DELETE),
     ):
         filename.touch()
         filename2.touch()
@@ -88,9 +84,7 @@ def test_file_guard_check():
     filename = Path(__file__).parent / "test.txt"
     filename.unlink(missing_ok=True)
 
-    with mnxlib.utils.FileGuard(
-        filename, delete_on_failure=False, check_exist_on_success=True
-    ):
+    with FileGuard(filename, on_success=FileAction.CHECK_EXISTS):
         filename.touch()
 
     assert filename.exists()
@@ -98,9 +92,7 @@ def test_file_guard_check():
 
     with (
         pytest.raises(FileNotFoundError, match=filename_regex(filename)),
-        mnxlib.utils.FileGuard(
-            filename, delete_on_failure=False, check_exist_on_success=True
-        ),
+        FileGuard(filename, on_success=FileAction.CHECK_EXISTS),
     ):
         pass
 
@@ -109,9 +101,7 @@ def test_file_guard_check():
     filename2 = Path(__file__).parent / "test2.txt"
     filename2.unlink(missing_ok=True)
 
-    with mnxlib.utils.FileGuard(
-        filename, filename2, delete_on_failure=False, check_exist_on_success=True
-    ):
+    with FileGuard(filename, filename2, on_success=FileAction.CHECK_EXISTS):
         filename.touch()
         filename2.touch()
 
@@ -122,9 +112,7 @@ def test_file_guard_check():
 
     with (
         pytest.raises(FileNotFoundError, match=filename_regex(filename, filename2)),
-        mnxlib.utils.FileGuard(
-            filename, filename2, delete_on_failure=False, check_exist_on_success=True
-        ),
+        FileGuard(filename, filename2, on_success=FileAction.CHECK_EXISTS),
     ):
         pass
 
@@ -133,9 +121,7 @@ def test_file_guard_check():
 
     with (
         pytest.raises(FileNotFoundError, match=filename_regex(filename2)),
-        mnxlib.utils.FileGuard(
-            filename, filename2, delete_on_failure=False, check_exist_on_success=True
-        ),
+        FileGuard(filename, filename2, on_success=FileAction.CHECK_EXISTS),
     ):
         filename.touch()
 
