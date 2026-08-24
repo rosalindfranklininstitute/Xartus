@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
-from xartus.lib.exceptions import InvalidEntryError
+from xartus.lib.exceptions import InvalidEntryError, EntryExistsError
 from typing import NamedTuple
 import sys
 from xarray.testing import assert_identical
@@ -39,7 +39,7 @@ def assert_equal_recursive(actual, expected):
 def check_dataarray(group: h5py.Group, dims: list[str]):
     assert group.attrs["NX_class"] == "NXdata"
     assert "signal" in group.attrs
-    assert group.attrs["axes"] == dims
+    assert all(a == d for a, d in zip(group.attrs["axes"], dims, strict=True))
 
 
 def check_dataset(datasets: list[str], cls: str, group: h5py.Group, dims: list[str]):
@@ -127,7 +127,7 @@ def nx_subentry():
         fle["/"].attrs["NX_class"] = "NXroot"
         grp = fle.create_group("entry")
         grp.attrs["NX_class"] = "NXentry"
-        grp = fle.create_group("sub")
+        grp = grp.create_group("sub")
         grp.attrs["NX_class"] = "NXsubentry"
 
     yield tmp_path
@@ -153,19 +153,21 @@ def test_dataarray_writing(nx_root, nx_entry, nx_subentry):
     with pytest.raises(InvalidEntryError, match="NXentry or NXsubentry"):
         initial_da.nexus.write_to(nx_root, data_path="/")
 
-    initial_da.nexus.write_to(nx_entry, data_path="/entry")
+    with pytest.raises(InvalidEntryError, match="NXentry or NXsubentry"):
+        initial_da.nexus.write_to(nx_entry, data_path="/entry")
+
+    initial_da.nexus.write_to(nx_entry, data_path="/entry/ints")
     with h5py.File(nx_entry, "r") as fle:
         assert "/entry/ints" in fle
-        assert fle["/entry/ints"].attrs["NX_class"] == "NXdata"
-        assert "signal" in fle["/entry/ints"].attrs
-        assert fle["/entry/ints"].attrs["axes"] == dims
+        check_dataarray(fle["/entry/ints"], dims)
 
-    initial_da.nexus.write_to(nx_subentry, data_path="/entry/sub")
+    with pytest.raises(EntryExistsError, match="ints in /entry: it already exists."):
+        initial_da.nexus.write_to(nx_entry, data_path="/entry/ints")
+
+    initial_da.nexus.write_to(nx_subentry, data_path="/entry/sub/ints")
     with h5py.File(nx_subentry, "r") as fle:
         assert "/entry/sub/ints" in fle
-        assert fle["/entry/sub/ints"].attrs["NX_class"] == "NXdata"
-        assert "signal" in fle["/entry/sub/ints"].attrs
-        assert fle["/entry/sub/ints"].attrs["axes"] == dims
+        check_dataarray(fle["/entry/sub/ints"], dims)
 
 
 def test_dataset_writing(nx_root, nx_entry, nx_subentry):
@@ -193,23 +195,24 @@ def test_dataset_writing(nx_root, nx_entry, nx_subentry):
         }
     )
 
-    datasets = ["int", "fractions"]
+    datasets = ["ints", "fractions"]
 
-    with pytest.raises(InvalidEntryError, match="NXentry or NXsubentry"):
+    with pytest.raises(EntryExistsError, match="already exists"):
         initial_ds.nexus.write_to(nx_root, entry_path="/")
 
     initial_ds.nexus.write_to(nx_root, entry_path="/entry")
-    with h5py.File(nx_entry, "r") as fle:
+    with h5py.File(nx_root, "r") as fle:
+        print_group(fle["/"])
         check_dataset(datasets, "NXentry", fle["/entry"], dims)
 
-    with pytest.raises(ValueError, match="already exits"):
+    with pytest.raises(EntryExistsError, match=":/entry: it already exists."):
         initial_ds.nexus.write_to(nx_entry, entry_path="/entry")
 
     initial_ds.nexus.write_into(nx_entry, entry_path="/entry")
     with h5py.File(nx_entry, "r") as fle:
         check_dataset(datasets, "NXentry", fle["/entry"], dims)
 
-    with pytest.raises(ValueError, match="NXdata already exits"):
+    with pytest.raises(EntryExistsError, match="ints in /entry: it already exists"):
         initial_ds.nexus.write_into(nx_entry, entry_path="/entry")
 
     initial_ds.nexus.write_to(nx_entry, entry_path="/entry/sub")
@@ -280,14 +283,14 @@ def test_datatree_writing(nx_root, nx_entry, nx_subentry):
             ),
         },
     )
-    datasets = ["int", "fractions"]
+    datasets = ["ints", "fractions"]
     children = {"child": ["sub_int", "sub_fractions"]}
 
-    with pytest.raises(ValueError, match="already exits"):
-        initial_dt.nexus.write_to(nx_root, root="/")
+    with pytest.raises(EntryExistsError):
+        initial_dt.nexus.write_to(nx_root, root_path="/")
 
     with pytest.raises(
-        InvalidEntryError, match="DataArrays only allowed on NXentry, not NXroot."
+        InvalidEntryError, match="Expected tree node / with class NXroot"
     ):
         initial_dt.nexus.write_into(nx_root, root_path="/")
 
@@ -295,7 +298,7 @@ def test_datatree_writing(nx_root, nx_entry, nx_subentry):
     with h5py.File(nx_root, "r") as fle:
         check_datatree(children, datasets, "NXentry", fle["/entry"], dims)
 
-    with pytest.raises(ValueError, match="NXdata already exits"):
+    with pytest.raises(EntryExistsError, match="ints in /entry: it already exists."):
         initial_dt.nexus.write_into(nx_root, root_path="/entry")
 
     initial_dt.nexus.write_into(nx_entry, root_path="/entry")
@@ -308,7 +311,7 @@ def test_datatree_writing(nx_root, nx_entry, nx_subentry):
 
     initial_dt.nexus.write_into(nx_subentry, root_path="/entry")
     with h5py.File(nx_subentry, "r") as fle:
-        check_datatree(children, datasets, "NXsubentry", fle["/entry"], dims)
+        check_datatree(children, datasets, "NXentry", fle["/entry"], dims)
         assert "/entry/sub/" in fle
         assert "ints" not in fle["/entry/sub/"]
         assert "child" not in fle["/entry/sub/"]

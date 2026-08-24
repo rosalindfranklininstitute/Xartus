@@ -4,7 +4,7 @@
 
 from xartus.lib.utils import DeferredAction
 from pathlib import Path
-from .exceptions import InvalidEntryError
+from .exceptions import InvalidEntryError, EntryExistsError
 from typing import Any, Iterable
 
 import dask.array as da
@@ -15,6 +15,10 @@ import numpy as np
 
 
 def _write_dataarray(dataarray: xr.DataArray, group: h5py.Group, name: str) -> None:
+    if name in group:
+        message = f"Cannot create {name} in {group.name}: it already exists."
+        raise EntryExistsError(message)
+
     nx_data: h5py.Group = group.create_group(name)
     nx_data.attrs["NX_class"] = "NXdata"
 
@@ -76,9 +80,9 @@ def _write_dataset(
 def _write_datatree(datatree: xr.DataTree, group: h5py.Group, nx_class) -> None:
     if "NX_class" in datatree.attrs:
         nx_class = datatree.attrs["NX_class"]
-        if nx_class not in ("NXentry", "NXsubentry") and datatree.has_data:
-            msg = f"Expected tree node {group.name} with class {nx_class} to not have any data."
-            raise InvalidEntryError(msg)
+    if nx_class not in ("NXentry", "NXsubentry") and datatree.has_data:
+        msg = f"Expected tree node {group.name} with class {nx_class} to not have any data."
+        raise InvalidEntryError(msg)
     _write_dataset(datatree, group, nx_class)
     nx_class = "NXentry" if nx_class == "NXroot" else "NXsubentry"
     for name, child in datatree.children.items():
@@ -97,7 +101,7 @@ class NexusDataArray:
 
     def write_to(self, filename_or_obj: Path | h5py.File, data_path: str) -> None:
         """
-        Write the given DataArray to the NeXus file at the given entry_path.
+        Write the given DataArray to the NeXus file creating the given data_path.
 
         Creates an NXdata and writes each the signal and coords.
         This expects the parent path to be an NXentry or NXsubentry
@@ -143,7 +147,7 @@ class NexusDataset:
         self, filename_or_obj: Path | h5py.File, entry_path: str = "/"
     ) -> None:
         """
-        Write the given Dataset to the NeXus file at the given entry_path.
+        Write the given Dataset to the NeXus file creating the entry_path.
 
         Creates an NXentry or NXsubentry and writes each array as a NXdata.
         If the parent path is the root a NXentry is created.
@@ -152,7 +156,7 @@ class NexusDataset:
 
         Args:
             filename_or_obj: The NeXus file to write to.
-            entry_path: The path of the entry to create.
+            entry_path: The path of the NXentry/NXsubentry to create.
         """
         with DeferredAction() as defer:
             if isinstance(filename_or_obj, h5py.File):
@@ -161,6 +165,10 @@ class NexusDataset:
                 nx_file = h5py.File(filename_or_obj, "a")
                 defer.on_complete(nx_file.close)
             filename = nx_file.filename
+
+            if entry_path in nx_file:
+                message = f"Cannot create {filename}:{entry_path}: it already exists."
+                raise EntryExistsError(message)
 
             base_path = "/".join(entry_path.removesuffix("/").split("/")[:-1]) + "/"
 
@@ -180,6 +188,37 @@ class NexusDataset:
             group: h5py.Group = nx_file.create_group(entry_path)
             _write_dataset(self.dataset, group, nx_class)
 
+    def write_into(
+        self, filename_or_obj: Path | h5py.File, entry_path: str = "/"
+    ) -> None:
+        """
+        Write the given Dataset to the NeXus file extending the existing entry at entry_path.
+
+        Expects the path to point at a NXentry or NXsubentry.
+
+        Args:
+            filename_or_obj: The NeXus file to write to.
+            entry_path: The path of the NXentry/NXsubentry to write to.
+        """
+        with DeferredAction() as defer:
+            if isinstance(filename_or_obj, h5py.File):
+                nx_file = filename_or_obj
+            else:
+                nx_file = h5py.File(filename_or_obj, "a")
+                defer.on_complete(nx_file.close)
+            filename = nx_file.filename
+
+            if "NX_class" not in nx_file[entry_path].attrs:
+                message = f"Expected {filename}:{entry_path} to have NX_class."
+                raise InvalidEntryError(message)
+            if nx_file[entry_path].attrs["NX_class"] not in ("NXentry", "NXsubentry"):
+                message = f"Expected {filename}:{entry_path} to be file NXentry or NXsubentry."
+                raise InvalidEntryError(message)
+
+            nx_class = nx_file[entry_path].attrs["NX_class"]
+
+            _write_dataset(self.dataset, nx_file[entry_path], nx_class)
+
 
 @xr.register_datatree_accessor("nexus")
 class NexusDataTree:
@@ -194,12 +233,59 @@ class NexusDataTree:
         self, filename_or_obj: Path | h5py.File, root_path: str = "/", mode="a"
     ) -> None:
         """
-        Write the given DataTree to the NeXus file rooted at the given root_path.
+        Write the given DataTree to the NeXus file creating the root at the given root_path.
 
         Creates an NXentry or NXsubentry and writes each array as a NXdata.
         If the parent path is the root a NXentry is created.
         If the parent path is a NXentry or NXsubentry a NXsubentry is created.
         If the parent path is anything else an exception is raised
+
+        Args:
+            filename_or_obj: The NeXus file to write to.
+            root_path: The path to the root of the tree.
+            mode: The mode to open the file with if filename_or_obj is a path.
+        """
+        if mode not in ("r+", "w", "w-", "x", "a"):
+            raise ValueError("Expected mode to be one of r+, w, w- or x, or a")
+        with DeferredAction() as defer:
+            if isinstance(filename_or_obj, h5py.File):
+                nx_file = filename_or_obj
+            else:
+                nx_file = h5py.File(filename_or_obj, mode)
+                defer.on_complete(nx_file.close)
+            filename = nx_file.filename
+
+            if root_path in nx_file:
+                message = f"Cannot create {filename}:{root_path}: it already exists."
+                raise EntryExistsError(message)
+
+            base_path = "/".join(root_path.removesuffix("/").split("/")[:-1]) + "/"
+
+            if "NX_class" not in nx_file[base_path].attrs:
+                if nx_file[base_path].name != "/":
+                    message = f"Expected {filename}:{base_path} to be file root or have NX_class."
+                    raise InvalidEntryError(message)
+                nx_class = "NXroot"
+            else:
+                nx_class = nx_file[base_path].attrs["NX_class"]
+
+            if nx_class not in ("NXroot", "NXentry", "NXsubentry"):
+                message = f"Expected {filename}:{base_path} to be file NXroot, NXentry or NXsubentry."
+                raise InvalidEntryError(message)
+
+            nx_class = "NXentry" if nx_class == "NXroot" else "NXsubentry"
+            group: h5py.Group = nx_file.create_group(root_path)
+
+            _write_datatree(self.datatree, group, nx_class)
+
+    def write_into(
+        self, filename_or_obj: Path | h5py.File, root_path: str = "/", mode="a"
+    ) -> None:
+        """
+        Write the given DataTree to the NeXus file extending the existing entry at root_path.
+
+        Expects the path to point at a NXentry or NXsubentry if it the node contains data.
+        If the node does not have data, NXroot is permitted.
 
         Args:
             filename_or_obj: The NeXus file to write to.
@@ -223,10 +309,6 @@ class NexusDataTree:
                 nx_class = "NXroot"
             else:
                 nx_class = nx_file[root_path].attrs["NX_class"]
-
-            if nx_class not in ("NXroot", "NXentry", "NXsubentry"):
-                message = f"Expected {filename}:{root_path} to be file NXroot, NXentry or NXsubentry."
-                raise InvalidEntryError(message)
 
             group = nx_file[root_path]
             _write_datatree(self.datatree, group, nx_class)

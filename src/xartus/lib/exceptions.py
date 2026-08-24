@@ -19,3 +19,7 @@ class InvalidAxisError(Exception):
 
 class InvalidEntryError(Exception):
     pass
+
+
+class EntryExistsError(Exception):
+    pass
