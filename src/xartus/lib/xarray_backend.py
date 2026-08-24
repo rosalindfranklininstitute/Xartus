@@ -24,6 +24,7 @@ class ArraySignalName:
     A NXdata group has a signal field. This is pointed to in the @signal attribute.
     It can have any name.
     However, `xarray.DataArray` has the same name as the name of the NXdata:
+
     >>> dims = ["x", "y", "z"]
     >>> shape = [3, 10, 1000]
     >>> ints = np.arange(0, np.prod(shape)).reshape(shape)
@@ -39,27 +40,26 @@ class ArraySignalName:
     ... )
     >>> assert ds.ints.name == "ints"
 
-    Thus if `xarray.DataArray.name` is used for the signal you end up with:
-    ```
-    > /entry/sub/ints: <HDF5 group "/entry/sub/ints" (6 members)>
-    | - @NX_class: NXdata
-    | - @signal: ints
-    | > /entry/sub/ints/ints: <HDF5 dataset "ints": shape (3, 10, 1000), type "<i2">
-    ```
+    Thus if `xarray.DataArray.name` is used for the signal you end up with::
+
+        > /entry/sub/ints: <HDF5 group "/entry/sub/ints" (6 members)>
+        | - @NX_class: NXdata
+        | - @signal: ints
+        | > /entry/sub/ints/ints: <HDF5 dataset "ints": shape (3, 10, 1000), type "<i2">
 
     This class has a __getitem__ method that allows rename this. It is passed the group path and the name of the NXdata entry and should return the name of the signal field.
-    The default implementation always gives:
+    The default implementation always gives 'signal':
+
     >>> signal_name = ArraySignalName()
-    >>> signal_name['/entry/spectra', 'ints']
+    >>> signal_name['/entry/sub', 'ints']
     'signal'
 
-    which would give:
-    ```
-    > /entry/sub/ints: <HDF5 group "/entry/sub/ints" (6 members)>
-    | - @NX_class: NXdata
-    | - @signal: ints
-    | > /entry/sub/ints/ints: <HDF5 dataset "ints": shape (3, 10, 1000), type "<i2">
-    ```
+    which would give the following NXdata::
+
+        > /entry/sub/ints: <HDF5 group "/entry/sub/ints" (6 members)>
+        | - @NX_class: NXdata
+        | - @signal: ints
+        | > /entry/sub/ints/ints: <HDF5 dataset "ints": shape (3, 10, 1000), type "<i2">
 
     """
 
