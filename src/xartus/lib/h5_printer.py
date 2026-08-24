@@ -5,9 +5,8 @@
 
 def print_item(item, offset="") -> None:
     name = f"{item.name}:" if hasattr(item, "name") else ""
-    parent = f" ({item.parent})" if hasattr(item, "parent") else ""
 
-    print(f"{offset}> {name} {str(item)}{parent}")
+    print(f"{offset}> {name} {str(item)}")
     for at in item.attrs:
         print(f"{offset}| - @{at}: {item.attrs[at]}")
 

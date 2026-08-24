@@ -34,12 +34,12 @@ class NxAxis:
         values,
         name: str,
         indices: list[int],
-        unit: str | None = None,
+        units: str | None = None,
         chunk_shape: Shape | None = None,
     ) -> "NxAxis":
         field = NXfield(values, name=name, chunks=chunk_shape)
-        if unit is not None:
-            field.attrs["unit"] = unit
+        if units is not None:
+            field.attrs["units"] = units
 
         return NxAxis(name=name, indices=indices, field=field)
 
@@ -288,7 +288,7 @@ def write_from_data(
                 NxAxis.create(
                     values=np.arange(0, data.shape[1], 1.0) * x_microns,
                     name="x",
-                    unit="micron",
+                    units="micron",
                     indices=[2],
                 ),
             ],
@@ -296,11 +296,11 @@ def write_from_data(
                 NxAxis.create(
                     values=np.arange(0, data.shape[2], 1.0) * y_microns,
                     name="y",
-                    unit="micron",
+                    units="micron",
                     indices=[2],
                 ),
             ],
-            [NxAxis.create(values=mass, name="mass", unit=mass_unit, indices=[3])],
+            [NxAxis.create(values=mass, name="mass", units=mass_unit, indices=[3])],
         ],
     )
 

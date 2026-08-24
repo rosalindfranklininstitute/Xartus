@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
+import logging
 from xartus.lib.exceptions import InvalidEntryError, EntryExistsError
 from typing import NamedTuple
 import sys
@@ -135,7 +136,7 @@ def nx_subentry():
     tmp_path.unlink()
 
 
-def test_dataarray_writing(nx_root, nx_entry, nx_subentry):
+def test_dataarray_writing(nx_root, nx_entry, nx_subentry, caplog):
     shape = [3, 10, 1000]
 
     ints = np.arange(0, np.prod(shape)).reshape(shape)
@@ -168,6 +169,16 @@ def test_dataarray_writing(nx_root, nx_entry, nx_subentry):
     with h5py.File(nx_subentry, "r") as fle:
         assert "/entry/sub/ints" in fle
         check_dataarray(fle["/entry/sub/ints"], dims)
+
+    with caplog.at_level(logging.WARNING):
+        initial_da.nexus.write_to(nx_subentry, data_path="/entry/sub/cats")
+
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelno == logging.WARNING
+    assert (
+        caplog.records[0].message
+        == "Writing array with name ints to NXdata with name cats. The array name will be lost."
+    )
 
 
 def test_dataset_writing(nx_root, nx_entry, nx_subentry):
@@ -330,7 +341,7 @@ def test_dataarray_there_and_back():
         name="ints",
         dims=dims,
         coords={key: np.arange(s) for key, s in zip(dims, shape, strict=True)},
-        attrs={"min": 0, "max": np.prod(shape)},
+        attrs={"min": 0, "max": np.prod(shape), "signal": "cats"},
     )
     path = Path("./test.nxs")
     with FileGuard(path, on_complete=FileAction.DELETE), DeferredAction() as defer:
@@ -338,10 +349,10 @@ def test_dataarray_there_and_back():
             grp = fle.create_group("/entry/")
             grp.attrs["NX_class"] = "NXentry"
 
-        initial_da.nexus.write_to(path, "/entry/cats/")
+        initial_da.nexus.write_to(path, "/entry/ints/")
         assert path.exists()
 
-        final_da = xr.open_dataarray(path, engine="nexus", entry_path="/entry/cats")
+        final_da = xr.open_dataarray(path, engine="nexus", entry_path="/entry/ints")
         defer.on_complete(final_da.close)
 
         assert_identical(initial_da, final_da)
@@ -362,13 +373,13 @@ def test_dataset_there_and_back():
                 ints,
                 dims=dims,
                 coords={key: np.arange(s) for key, s in zip(dims, shape, strict=True)},
-                attrs={"min": 0, "max": np.prod(shape)},
+                attrs={"min": 0, "max": np.prod(shape), "signal": "signal"},
             ),
             "fractions": xr.DataArray(
                 fractions,
                 dims=dims,
                 coords={key: np.arange(s) for key, s in zip(dims, shape, strict=True)},
-                attrs={"min": 0, "max": 1},
+                attrs={"min": 0, "max": 1, "signal": "signal"},
             ),
         }
     )
@@ -406,7 +417,7 @@ def test_datatree_there_and_back():
                     coords={
                         key: np.arange(s) for key, s in zip(dims, shape, strict=True)
                     },
-                    attrs={"min": 0, "max": np.prod(shape)},
+                    attrs={"min": 0, "max": np.prod(shape), "signal": "signal"},
                 ),
                 "fractions": xr.DataArray(
                     fractions,
@@ -414,7 +425,7 @@ def test_datatree_there_and_back():
                     coords={
                         key: np.arange(s) for key, s in zip(dims, shape, strict=True)
                     },
-                    attrs={"min": 0, "max": 1},
+                    attrs={"min": 0, "max": 1, "signal": "signal"},
                 ),
             }
         ),
@@ -429,7 +440,7 @@ def test_datatree_there_and_back():
                                 key: np.arange(s)
                                 for key, s in zip(dims, shape, strict=True)
                             },
-                            attrs={"min": 0, "max": np.prod(shape)},
+                            attrs={"min": 0, "max": np.prod(shape), "signal": "signal"},
                         ),
                         "sub_fractions": xr.DataArray(
                             fractions,
@@ -438,7 +449,7 @@ def test_datatree_there_and_back():
                                 key: np.arange(s)
                                 for key, s in zip(dims, shape, strict=True)
                             },
-                            attrs={"min": 0, "max": 1},
+                            attrs={"min": 0, "max": 1, "signal": "signal"},
                         ),
                     }
                 )
@@ -451,10 +462,10 @@ def test_datatree_there_and_back():
 
     path = Path("./test.nxs")
     with FileGuard(path, on_complete=FileAction.DELETE), DeferredAction() as defer:
-        initial_dt.nexus.write_to(path)
+        initial_dt.nexus.write_to(path, "/entry")
         assert path.exists()
 
-        final_dt = xr.open_datatree(path, engine="nexus")
+        final_dt = xr.open_datatree(path, engine="nexus", root="/entry")
         defer.on_complete(final_dt.close)
 
         assert_identical(initial_dt, final_dt)
@@ -470,8 +481,12 @@ def test_nexus_there_and_back(man_data_and_nexus):
     with FileGuard(path, on_complete=FileAction.DELETE), DeferredAction() as defer:
         dt = xr.open_datatree(nx_file, engine="nexus")
         defer.on_complete(dt.close)
-        dt.nexus.write_to(path)
+        dt.nexus.write_into(path)
         assert path.exists()
+
+        print(" >>> <<< ")
+        with h5py.File(path, "r") as fle:
+            print_group(fle)
 
         def compare(nxe, fle):
             initial_names = list(nxe)
@@ -497,7 +512,13 @@ def test_nexus_there_and_back(man_data_and_nexus):
 
                 if isinstance(initial_entry, h5py.Dataset):
                     assert isinstance(final_entry, h5py.Dataset)
-                    np.testing.assert_allclose(initial_entry, final_entry)
+                    if np.issubdtype(initial_entry.dtype, np.number):
+                        np.testing.assert_allclose(initial_entry, final_entry)
+                    else:
+                        assert all(
+                            ini == fin
+                            for ini, fin in zip(initial_entry, final_entry, strict=True)
+                        )
                 else:
                     assert isinstance(initial_entry, h5py.Group)
                     assert isinstance(final_entry, h5py.Group)

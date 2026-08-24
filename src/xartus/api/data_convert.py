@@ -310,7 +310,7 @@ def provision_data_axis(
                         values=values,
                         name=axis.name,
                         indices=[axis.primary_axis],
-                        unit=axis.units,
+                        units=axis.units,
                     )
                     group_axes[axis.primary_axis].append(nx_axis)
                 case AxisType.BINNED:
@@ -329,7 +329,7 @@ def provision_data_axis(
                         values=values,
                         name=axis.name,
                         indices=[axis.primary_axis],
-                        unit=axis.units,
+                        units=axis.units,
                     )
                     if entry_name != _count_subentry_name():
                         nx_axis_exact = NxAxis.create_empty(
@@ -425,7 +425,7 @@ def provision_accumulation_subentries(
                     values=["sum", "max"],
                     name="accumulator",
                     indices=[0],
-                    unit="",
+                    units="",
                 ),
             ],
         )
@@ -467,7 +467,7 @@ def provision_accumulation_subentries(
                     values=values,
                     name=ax.name,
                     indices=[cast(int, new_index + 1)],
-                    unit=ax.units,
+                    units=ax.units,
                 )
                 group_axes[new_index + 1].append(nx_axis)
 

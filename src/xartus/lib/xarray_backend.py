@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 
+import logging
 from xartus.lib.utils import DeferredAction
 from pathlib import Path
 from .exceptions import InvalidEntryError, EntryExistsError
@@ -13,8 +14,71 @@ import xarray as xr
 from xarray.backends import BackendEntrypoint
 import numpy as np
 
+logger = logging.getLogger(__name__)
 
-def _write_dataarray(dataarray: xr.DataArray, group: h5py.Group, name: str) -> None:
+
+class ArraySignalName:
+    """
+    A class used for providing a name for the field on the NXdata.
+
+    A NXdata group has a signal field. This is pointed to in the @signal attribute.
+    It can have any name.
+    However, `xarray.DataArray` has the same name as the name of the NXdata:
+    >>> dims = ["x", "y", "z"]
+    >>> shape = [3, 10, 1000]
+    >>> ints = np.arange(0, np.prod(shape)).reshape(shape)
+    >>> ds = xr.Dataset(
+    ...    {
+    ...        "ints": xr.DataArray(
+    ...            ints,
+    ...            dims=dims,
+    ...            coords={key: np.arange(s) for key, s in zip(dims, shape, strict=True)},
+    ...            attrs={"min": 0, "max": np.prod(shape)},
+    ...         ),
+    ...     }
+    ... )
+    >>> assert ds.ints.name == "ints"
+
+    Thus if `xarray.DataArray.name` is used for the signal you end up with:
+    ```
+    > /entry/sub/ints: <HDF5 group "/entry/sub/ints" (6 members)>
+    | - @NX_class: NXdata
+    | - @signal: ints
+    | > /entry/sub/ints/ints: <HDF5 dataset "ints": shape (3, 10, 1000), type "<i2">
+    ```
+
+    This class has a __getitem__ method that allows rename this. It is passed the group path and the name of the NXdata entry and should return the name of the signal field.
+    The default implementation always gives:
+    >>> signal_name = ArraySignalName()
+    >>> signal_name['/entry/spectra', 'ints']
+    'signal'
+
+    which would give:
+    ```
+    > /entry/sub/ints: <HDF5 group "/entry/sub/ints" (6 members)>
+    | - @NX_class: NXdata
+    | - @signal: ints
+    | > /entry/sub/ints/ints: <HDF5 dataset "ints": shape (3, 10, 1000), type "<i2">
+    ```
+
+    """
+
+    def __getitem__(self, name: tuple[str, str]) -> str:
+        """
+        Takes in group_path and NXdata name, and should return the name of the signal field.
+
+
+        Args:
+            name: A tuple of (group_path, NXdata_name)
+        Returns:
+            The name of the signal field ont he NXdata
+        """
+        return "signal"
+
+
+def _write_dataarray(
+    dataarray: xr.DataArray, group: h5py.Group, name: str, signal_name: ArraySignalName
+) -> None:
     if name in group:
         message = f"Cannot create {name} in {group.name}: it already exists."
         raise EntryExistsError(message)
@@ -25,13 +89,17 @@ def _write_dataarray(dataarray: xr.DataArray, group: h5py.Group, name: str) -> N
     for k, v in dataarray.attrs.items():
         nx_data.attrs[k] = v
 
+    if "signal" in dataarray.attrs:
+        sname = dataarray.attrs["signal"]
+    else:
+        sname = signal_name[group.name, name]
     signal = nx_data.create_dataset(
-        dataarray.name,
+        sname,
         shape=dataarray.shape,
         dtype=dataarray.dtype,
         chunks=dataarray.chunks,
     )
-    nx_data.attrs["signal"] = dataarray.name
+    nx_data.attrs["signal"] = sname
 
     chunks = dataarray.shape if dataarray.chunks is None else dataarray.chunks
     if isinstance(dataarray.data, da.Array):
@@ -67,27 +135,32 @@ def _write_dataarray(dataarray: xr.DataArray, group: h5py.Group, name: str) -> N
 
 
 def _write_dataset(
-    dataset: xr.Dataset | xr.DataTree, group: h5py.Group, nx_class
+    dataset: xr.Dataset | xr.DataTree,
+    group: h5py.Group,
+    nx_class,
+    signal_name: ArraySignalName,
 ) -> None:
     attrs = dict(dataset.attrs)
     attrs["NX_class"] = nx_class
     for k, v in attrs.items():
         group.attrs[k] = v
     for name, var in dataset.data_vars.items():
-        _write_dataarray(var, group, str(name))
+        _write_dataarray(var, group, str(name), signal_name)
 
 
-def _write_datatree(datatree: xr.DataTree, group: h5py.Group, nx_class) -> None:
+def _write_datatree(
+    datatree: xr.DataTree, group: h5py.Group, nx_class, signal_name: ArraySignalName
+) -> None:
     if "NX_class" in datatree.attrs:
         nx_class = datatree.attrs["NX_class"]
     if nx_class not in ("NXentry", "NXsubentry") and datatree.has_data:
         msg = f"Expected tree node {group.name} with class {nx_class} to not have any data."
         raise InvalidEntryError(msg)
-    _write_dataset(datatree, group, nx_class)
+    _write_dataset(datatree, group, nx_class, signal_name)
     nx_class = "NXentry" if nx_class == "NXroot" else "NXsubentry"
     for name, child in datatree.children.items():
         sub_group = group.create_group(name)
-        _write_datatree(child, sub_group, nx_class)
+        _write_datatree(child, sub_group, nx_class, signal_name)
 
 
 @xr.register_dataarray_accessor("nexus")
@@ -99,7 +172,12 @@ class NexusDataArray:
     def __init__(self, xarray_obj: xr.DataArray):
         self.dataarray = xarray_obj
 
-    def write_to(self, filename_or_obj: Path | h5py.File, data_path: str) -> None:
+    def write_to(
+        self,
+        filename_or_obj: Path | h5py.File,
+        data_path: str,
+        signal_name: None | ArraySignalName = None,
+    ) -> None:
         """
         Write the given DataArray to the NeXus file creating the given data_path.
 
@@ -131,7 +209,12 @@ class NexusDataArray:
                 )
                 raise InvalidEntryError(message)
 
-            _write_dataarray(self.dataarray, nx_file[base_path], name)
+            if name != self.dataarray.name:
+                logger.warning(
+                    f"Writing array with name {self.dataarray.name} to NXdata with name {name}. The array name will be lost."
+                )
+            signal_name = signal_name if signal_name is not None else ArraySignalName()
+            _write_dataarray(self.dataarray, nx_file[base_path], name, signal_name)
 
 
 @xr.register_dataset_accessor("nexus")
@@ -144,7 +227,10 @@ class NexusDataset:
         self.dataset = xarray_obj
 
     def write_to(
-        self, filename_or_obj: Path | h5py.File, entry_path: str = "/"
+        self,
+        filename_or_obj: Path | h5py.File,
+        entry_path: str = "/",
+        signal_name: None | ArraySignalName = None,
     ) -> None:
         """
         Write the given Dataset to the NeXus file creating the entry_path.
@@ -186,10 +272,14 @@ class NexusDataset:
 
             nx_class = "NXentry" if nx_class == "NXroot" else "NXsubentry"
             group: h5py.Group = nx_file.create_group(entry_path)
-            _write_dataset(self.dataset, group, nx_class)
+            signal_name = signal_name if signal_name is not None else ArraySignalName()
+            _write_dataset(self.dataset, group, nx_class, signal_name)
 
     def write_into(
-        self, filename_or_obj: Path | h5py.File, entry_path: str = "/"
+        self,
+        filename_or_obj: Path | h5py.File,
+        entry_path: str = "/",
+        signal_name: None | ArraySignalName = None,
     ) -> None:
         """
         Write the given Dataset to the NeXus file extending the existing entry at entry_path.
@@ -216,8 +306,8 @@ class NexusDataset:
                 raise InvalidEntryError(message)
 
             nx_class = nx_file[entry_path].attrs["NX_class"]
-
-            _write_dataset(self.dataset, nx_file[entry_path], nx_class)
+            signal_name = signal_name if signal_name is not None else ArraySignalName()
+            _write_dataset(self.dataset, nx_file[entry_path], nx_class, signal_name)
 
 
 @xr.register_datatree_accessor("nexus")
@@ -230,7 +320,11 @@ class NexusDataTree:
         self.datatree = xarray_obj
 
     def write_to(
-        self, filename_or_obj: Path | h5py.File, root_path: str = "/", mode="a"
+        self,
+        filename_or_obj: Path | h5py.File,
+        root_path: str = "/",
+        mode="a",
+        signal_name: None | ArraySignalName = None,
     ) -> None:
         """
         Write the given DataTree to the NeXus file creating the root at the given root_path.
@@ -275,11 +369,16 @@ class NexusDataTree:
 
             nx_class = "NXentry" if nx_class == "NXroot" else "NXsubentry"
             group: h5py.Group = nx_file.create_group(root_path)
+            signal_name = signal_name if signal_name is not None else ArraySignalName()
 
-            _write_datatree(self.datatree, group, nx_class)
+            _write_datatree(self.datatree, group, nx_class, signal_name)
 
     def write_into(
-        self, filename_or_obj: Path | h5py.File, root_path: str = "/", mode="a"
+        self,
+        filename_or_obj: Path | h5py.File,
+        root_path: str = "/",
+        mode="a",
+        signal_name: None | ArraySignalName = None,
     ) -> None:
         """
         Write the given DataTree to the NeXus file extending the existing entry at root_path.
@@ -311,7 +410,8 @@ class NexusDataTree:
                 nx_class = nx_file[root_path].attrs["NX_class"]
 
             group = nx_file[root_path]
-            _write_datatree(self.datatree, group, nx_class)
+            signal_name = signal_name if signal_name is not None else ArraySignalName()
+            _write_datatree(self.datatree, group, nx_class, signal_name)
 
 
 def insert_into_axes(axes: list[str], axis: list[str]) -> list[str]:
@@ -527,7 +627,7 @@ class NexusEntrypoint(BackendEntrypoint):
         path_attrs = dict(self.nx_file[data_path].attrs)
         del path_attrs["NX_class"]
         del path_attrs["axes"]
-        del path_attrs["signal"]
+        path_attrs["signal"]
 
         signal = self.nx_file[data_path].attrs["signal"]
         axes: list[str] = self.nx_file[data_path].attrs["axes"]
@@ -559,20 +659,17 @@ class NexusEntrypoint(BackendEntrypoint):
                         chunks = "auto"
                 values = da.from_array(self.nx_file[axis_path], chunks=chunks)
 
-                if "unit" in axis_attrs:
-                    axis_attrs["units"] = axis_attrs["unit"]
-                    del axis_attrs["unit"]
-
                 inner_coords[name] = (
                     coord_dims,
                     values,
                     axis_attrs,
                 )
         signal_path = f"{data_path}/{signal}"
+        name = data_path.removesuffix("/").split("/")[-1]
         chunks = self.nx_file[signal_path].chunks or "auto"
         return xr.DataArray(
             da.from_array(self.nx_file[signal_path], chunks=chunks),
-            name=signal,
+            name=name,
             dims=axes,
             coords=inner_coords,
             attrs=path_attrs,

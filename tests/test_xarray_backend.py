@@ -51,7 +51,7 @@ def test_default_dataarray(man_data_and_nexus):
     assert da is not None
     assert isinstance(da, xr.DataArray)
 
-    assert da.name == "signal"
+    assert da.name == "data"
     assert "x" in da.coords
     assert "y" in da.coords
     assert "mz" in da.coords
@@ -72,7 +72,7 @@ def test_specific_dataarray(man_data_and_nexus):
     assert da is not None
     assert isinstance(da, xr.DataArray)
 
-    assert da.name == "signal"
+    assert da.name == "data"
     assert "x" in da.coords
     assert "y" in da.coords
     assert "mz" in da.coords
@@ -93,7 +93,7 @@ def test_default_dataset(man_data_and_nexus):
     assert ds is not None
     assert isinstance(ds, xr.Dataset)
 
-    assert "signal" in ds
+    assert "data" in ds
     assert "x" in ds.coords
     assert "y" in ds.coords
     assert "mz" in ds.coords
