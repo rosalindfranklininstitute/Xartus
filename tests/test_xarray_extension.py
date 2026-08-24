@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
+from xartus.lib.exceptions import InvalidEntryError
+from typing import NamedTuple
 import sys
 from xarray.testing import assert_identical
 from xartus.lib.h5_printer import print_group
@@ -34,6 +36,33 @@ def assert_equal_recursive(actual, expected):
         assert actual == expected
 
 
+def check_dataarray(group: h5py.Group, dims: list[str]):
+    assert group.attrs["NX_class"] == "NXdata"
+    assert "signal" in group.attrs
+    assert group.attrs["axes"] == dims
+
+
+def check_dataset(datasets: list[str], cls: str, group: h5py.Group, dims: list[str]):
+    assert "NX_class" in group.attrs
+    assert group.attrs["NX_class"] == cls
+    for name in datasets:
+        assert name in group
+        check_dataarray(group[name], dims)
+
+
+def check_datatree(
+    children: dict[str, list[str]],
+    datasets: list[str],
+    cls: str,
+    group: h5py.Group,
+    dims: list[str],
+):
+    check_dataset(datasets, cls, group, dims)
+    for child, ds in children.items():
+        assert child in group
+        check_dataset(ds, "NXsubentry", group[child], dims)
+
+
 @pytest.fixture(scope="module")
 def man_data_and_nexus():
     man_file = data_files()["man1"]
@@ -60,6 +89,229 @@ def man_data_and_nexus():
     data_convert.process(process_args, {})
     yield man_data, filename
     filename.unlink()
+
+
+class NeXusAndPath(NamedTuple):
+    fle: h5py.File
+    path: Path
+
+
+@pytest.fixture
+def nx_root():
+    tmp_path = Path("./nx_root.nxs")
+    with h5py.File(tmp_path, "w") as fle:
+        fle["/"].attrs["NX_class"] = "NXroot"
+
+    yield tmp_path
+
+    tmp_path.unlink()
+
+
+@pytest.fixture
+def nx_entry():
+    tmp_path = Path("./nx_entry.nxs")
+    with h5py.File(tmp_path, "w") as fle:
+        fle["/"].attrs["NX_class"] = "NXroot"
+        grp = fle.create_group("entry")
+        grp.attrs["NX_class"] = "NXentry"
+
+    yield tmp_path
+
+    tmp_path.unlink()
+
+
+@pytest.fixture
+def nx_subentry():
+    tmp_path = Path("./nx_subentry.nxs")
+    with h5py.File(tmp_path, "w") as fle:
+        fle["/"].attrs["NX_class"] = "NXroot"
+        grp = fle.create_group("entry")
+        grp.attrs["NX_class"] = "NXentry"
+        grp = fle.create_group("sub")
+        grp.attrs["NX_class"] = "NXsubentry"
+
+    yield tmp_path
+
+    tmp_path.unlink()
+
+
+def test_dataarray_writing(nx_root, nx_entry, nx_subentry):
+    shape = [3, 10, 1000]
+
+    ints = np.arange(0, np.prod(shape)).reshape(shape)
+
+    dims = ["x", "y", "z"]
+
+    initial_da = xr.DataArray(
+        ints,
+        name="ints",
+        dims=dims,
+        coords={key: np.arange(s) for key, s in zip(dims, shape, strict=True)},
+        attrs={"min": 0, "max": np.prod(shape)},
+    )
+
+    with pytest.raises(InvalidEntryError, match="NXentry or NXsubentry"):
+        initial_da.nexus.write_to(nx_root, data_path="/")
+
+    initial_da.nexus.write_to(nx_entry, data_path="/entry")
+    with h5py.File(nx_entry, "r") as fle:
+        assert "/entry/ints" in fle
+        assert fle["/entry/ints"].attrs["NX_class"] == "NXdata"
+        assert "signal" in fle["/entry/ints"].attrs
+        assert fle["/entry/ints"].attrs["axes"] == dims
+
+    initial_da.nexus.write_to(nx_subentry, data_path="/entry/sub")
+    with h5py.File(nx_subentry, "r") as fle:
+        assert "/entry/sub/ints" in fle
+        assert fle["/entry/sub/ints"].attrs["NX_class"] == "NXdata"
+        assert "signal" in fle["/entry/sub/ints"].attrs
+        assert fle["/entry/sub/ints"].attrs["axes"] == dims
+
+
+def test_dataset_writing(nx_root, nx_entry, nx_subentry):
+    shape = [3, 10, 1000]
+
+    ints = np.arange(0, np.prod(shape)).reshape(shape)
+    fractions = np.arange(0, np.prod(shape)).reshape(shape) / np.prod(shape)
+
+    dims = ["x", "y", "z"]
+
+    initial_ds = xr.Dataset(
+        {
+            "ints": xr.DataArray(
+                ints,
+                dims=dims,
+                coords={key: np.arange(s) for key, s in zip(dims, shape, strict=True)},
+                attrs={"min": 0, "max": np.prod(shape)},
+            ),
+            "fractions": xr.DataArray(
+                fractions,
+                dims=dims,
+                coords={key: np.arange(s) for key, s in zip(dims, shape, strict=True)},
+                attrs={"min": 0, "max": 1},
+            ),
+        }
+    )
+
+    datasets = ["int", "fractions"]
+
+    with pytest.raises(InvalidEntryError, match="NXentry or NXsubentry"):
+        initial_ds.nexus.write_to(nx_root, entry_path="/")
+
+    initial_ds.nexus.write_to(nx_root, entry_path="/entry")
+    with h5py.File(nx_entry, "r") as fle:
+        check_dataset(datasets, "NXentry", fle["/entry"], dims)
+
+    with pytest.raises(ValueError, match="already exits"):
+        initial_ds.nexus.write_to(nx_entry, entry_path="/entry")
+
+    initial_ds.nexus.write_into(nx_entry, entry_path="/entry")
+    with h5py.File(nx_entry, "r") as fle:
+        check_dataset(datasets, "NXentry", fle["/entry"], dims)
+
+    with pytest.raises(ValueError, match="NXdata already exits"):
+        initial_ds.nexus.write_into(nx_entry, entry_path="/entry")
+
+    initial_ds.nexus.write_to(nx_entry, entry_path="/entry/sub")
+    with h5py.File(nx_entry, "r") as fle:
+        check_dataset(datasets, "NXsubentry", fle["/entry/sub"], dims)
+
+    initial_ds.nexus.write_into(nx_subentry, entry_path="/entry/sub")
+    with h5py.File(nx_subentry, "r") as fle:
+        check_dataset(datasets, "NXsubentry", fle["/entry/sub"], dims)
+
+
+def test_datatree_writing(nx_root, nx_entry, nx_subentry):
+    shape = [3, 10, 1000]
+
+    ints = np.arange(0, np.prod(shape)).reshape(shape)
+    fractions = np.arange(0, np.prod(shape)).reshape(shape) / np.prod(shape)
+
+    dims = ["x", "y", "z"]
+
+    initial_dt = xr.DataTree(
+        xr.Dataset(
+            {
+                "ints": xr.DataArray(
+                    ints,
+                    dims=dims,
+                    coords={
+                        key: np.arange(s) for key, s in zip(dims, shape, strict=True)
+                    },
+                    attrs={"min": 0, "max": np.prod(shape)},
+                ),
+                "fractions": xr.DataArray(
+                    fractions,
+                    dims=dims,
+                    coords={
+                        key: np.arange(s) for key, s in zip(dims, shape, strict=True)
+                    },
+                    attrs={"min": 0, "max": 1},
+                ),
+            }
+        ),
+        children={
+            "child": xr.DataTree(
+                xr.Dataset(
+                    {
+                        "sub_int": xr.DataArray(
+                            ints,
+                            dims=dims,
+                            coords={
+                                key: np.arange(s)
+                                for key, s in zip(dims, shape, strict=True)
+                            },
+                            attrs={"min": 0, "max": np.prod(shape)},
+                        ),
+                        "sub_fractions": xr.DataArray(
+                            fractions,
+                            dims=dims,
+                            coords={
+                                key: np.arange(s)
+                                for key, s in zip(dims, shape, strict=True)
+                            },
+                            attrs={"min": 0, "max": 1},
+                        ),
+                    }
+                )
+            ),
+            "params": xr.DataTree(
+                xr.Dataset(attrs={"NX_class": "NXparameters", "python": sys.version})
+            ),
+        },
+    )
+    datasets = ["int", "fractions"]
+    children = {"child": ["sub_int", "sub_fractions"]}
+
+    with pytest.raises(ValueError, match="already exits"):
+        initial_dt.nexus.write_to(nx_root, root="/")
+
+    with pytest.raises(
+        InvalidEntryError, match="DataArrays only allowed on NXentry, not NXroot."
+    ):
+        initial_dt.nexus.write_into(nx_root, root_path="/")
+
+    initial_dt.nexus.write_to(nx_root, root_path="/entry")
+    with h5py.File(nx_root, "r") as fle:
+        check_datatree(children, datasets, "NXentry", fle["/entry"], dims)
+
+    with pytest.raises(ValueError, match="NXdata already exits"):
+        initial_dt.nexus.write_into(nx_root, root_path="/entry")
+
+    initial_dt.nexus.write_into(nx_entry, root_path="/entry")
+    with h5py.File(nx_entry, "r") as fle:
+        check_datatree(children, datasets, "NXentry", fle["/entry"], dims)
+
+    initial_dt.nexus.write_to(nx_entry, root_path="/entry/sub")
+    with h5py.File(nx_entry, "r") as fle:
+        check_datatree(children, datasets, "NXsubentry", fle["/entry/sub"], dims)
+
+    initial_dt.nexus.write_into(nx_subentry, root_path="/entry")
+    with h5py.File(nx_subentry, "r") as fle:
+        check_datatree(children, datasets, "NXsubentry", fle["/entry"], dims)
+        assert "/entry/sub/" in fle
+        assert "ints" not in fle["/entry/sub/"]
+        assert "child" not in fle["/entry/sub/"]
 
 
 def test_dataarray_there_and_back():
