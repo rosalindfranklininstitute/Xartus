@@ -23,7 +23,7 @@ release = "v0.2.0"
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    "myst_parser",
+    "myst_nb",
     "sphinx.ext.autodoc",
     "sphinx.ext.githubpages",
     "sphinx.ext.autosummary",
@@ -41,6 +41,7 @@ autodoc_default_options = {
     "undoc-members": False,
     "show-inheritance": True,
 }
+
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output

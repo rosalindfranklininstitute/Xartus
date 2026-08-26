@@ -9,20 +9,22 @@ from xartus import lib as nxlib
 import numpy as np
 
 
-def get_corner(data, corner: nxlib.OriginLocation):
+def get_corner(data, corner: nxlib.image.OriginLocation):
     match corner:
-        case nxlib.OriginLocation.UPPER_LEFT:
+        case nxlib.image.OriginLocation.UPPER_LEFT:
             return data[0, 0]
-        case nxlib.OriginLocation.UPPER_RIGHT:
+        case nxlib.image.OriginLocation.UPPER_RIGHT:
             return data[0, -1]
-        case nxlib.OriginLocation.LOWER_LEFT:
+        case nxlib.image.OriginLocation.LOWER_LEFT:
             return data[-1, 0]
-        case nxlib.OriginLocation.LOWER_RIGHT:
+        case nxlib.image.OriginLocation.LOWER_RIGHT:
             return data[-1, -1]
 
 
 @given(...)
-def test_adjust_origin(new: nxlib.OriginLocation, current: nxlib.OriginLocation):
+def test_adjust_origin(
+    new: nxlib.image.OriginLocation, current: nxlib.image.OriginLocation
+):
 
     data = np.array([[0, 1, 2, 3], [10, 11, 12, 13], [20, 21, 22, 23]])
 
@@ -34,13 +36,13 @@ def test_adjust_origin(new: nxlib.OriginLocation, current: nxlib.OriginLocation)
 
 
 @given(...)
-def test_adjust_origin_default(new: nxlib.OriginLocation):
+def test_adjust_origin_default(new: nxlib.image.OriginLocation):
 
     data = np.array([[0, 1, 2, 3], [10, 11, 12, 13], [20, 21, 22, 23]])
 
     adjusted = nxlib.image.adjust_origin(data, new)
 
-    assert get_corner(adjusted, nxlib.OriginLocation.UPPER_LEFT) == get_corner(
+    assert get_corner(adjusted, nxlib.image.OriginLocation.UPPER_LEFT) == get_corner(
         data,
         new,
     )

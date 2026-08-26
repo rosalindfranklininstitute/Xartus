@@ -30,7 +30,7 @@ from argsui import (
 from ..lib.nxs import NexusFile, NxAxis, NxAxes, create_field, FieldOptions
 from ..lib.chunker import count_chunks_to_cover
 from ..lib.bounds import Shape, Chunk
-from ..lib.image import plot_image
+from ..lib.image import imshow_sparse
 from ..lib.spectrum import plot_spectrum
 from ..lib.utils import simplify_chunks
 
@@ -453,7 +453,7 @@ class GroupParams:
                         values,
                         name=name,
                         indices=indices,
-                        unit=unit,
+                        units=unit,
                         chunk_shape=chunks,
                     )
                 )
@@ -723,7 +723,7 @@ def process(args: ProcessArgs, config: dict[str, Any]) -> None:
                         ndim = len(shaped_data.shape)
                         if ndim == 2 and args.plot_image:
                             fig, ax = plt.subplots()
-                            plot_image(
+                            imshow_sparse(
                                 ax,
                                 shaped_data.compute(),
                                 final_axes[indices[0]][0].field.nxdata,

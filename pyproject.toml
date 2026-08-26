@@ -41,6 +41,7 @@ doc = [
     "myst-parser>=5.1.0",
     "sphinx-rtd-theme>=3.1.0",
     "sphinx-autodoc-typehints>=3.13.2",
+    "myst-nb>=1.4.0",
 ]
 
 [project.scripts]
@@ -108,7 +109,10 @@ allowed-unresolved-imports = ["nexusformat.nexus.tree.NXparameters" ,"nexusforma
 fle = 'fle'
 
 [tool.typos.default]
-extend-ignore-re = [ ">\\w+(\\s|<[^/])"] # Ignore words that are cut by html tags.
+extend-ignore-re = [ 
+                    ">\\w+(\\s|<[^/])",
+                    "np.arange",
+                   ] # Ignore words that are cut by html tags.
 
 [tool.bumpversion]
 current_version = "0.4.0"

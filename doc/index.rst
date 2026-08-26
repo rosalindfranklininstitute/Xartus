@@ -7,19 +7,16 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Xartus documentation
-====================
-
-
-
 .. include:: ../README.md
    :parser: myst_parser.sphinx_
 
-.. rubric:: Modules
+.. toctree::
+   :glob:
+   :maxdepth: 2
+   :caption: Xartus
+   :hidden:
 
-.. autosummary::
-   :recursive:
-   :toctree: CODE
+   Notebooks/*
+   api
+   license
 
-   xartus
-   

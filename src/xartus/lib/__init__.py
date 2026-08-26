@@ -2,12 +2,21 @@
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 
-from . import bounds as bounds
-from . import chunker as chunker
 from . import image as image
-from . import nxs as nxs
 from . import utils as utils
-from .bounds import ContainedBounds
+from . import unidec as unidec
+from . import xarray_backend as xarray_backend
+from .chunker import count_chunks_to_cover, Chunker
+from .bounds import ContainedBounds, Chunk
 from .h5_printer import print_group
-from .image import OriginLocation
 from .timers import JSONTimer
+from .multi_coo import MultiCOO
+from .data_source import Signal, AxisType, Axis, UnknownAxisError, AbstractDataSource
+from .exceptions import (
+    NoDataError,
+    InnerDataNotContainedError,
+    UnsupportedDataError,
+    InvalidAxisError,
+    InvalidEntryError,
+    EntryExistsError,
+)

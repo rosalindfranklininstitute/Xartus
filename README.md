@@ -6,6 +6,15 @@ SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 
 # Xartus: <strong>Xarr</strong>ay <strong>t</strong>hrough NeX<strong>us</strong>
 
+![xartus-version](./badges/xartus-version.svg)
+![xartus-requires-python](./badges/xartus-requires-python.svg)
+![xartus-license](./badges/xartus-license.svg)
+
+![tests](./badges/tests.svg)
+![skipped](./badges/skiped.svg)
+![coverage](./badges/coverage.svg)
+![last-run](./badges/last-run.svg)
+
 This repo is hope to a collection of tools for converting data into the [NeXus](https://www.nexusformat.org/) format.
 In addition, there are tools to read and write NeXus files to and from [Xarray](https://docs.xarray.dev/en/stable/index.html) DataArrays, DataSets and Datatrees.
 
