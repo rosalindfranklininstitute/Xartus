@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 
-name: tests, coverage and pages
+name: Build pages
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  test:
+  pages:
     if: (github.event_name == 'push')
     runs-on: ubuntu-latest
 
@@ -27,31 +27,12 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
 
       - name: Install dependencies
-        run: uv sync --group doc
+        run: uv sync --group doc --no-editable
 
-      - name: Run tests (with coverage + badges + pages output)
+      - name: Run Sphinx
         run: |
-          mkdir -p badges
-          date
-          uv run pytest
           date
           make html
-
-      - name: Upload HTML coverage artifact
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: htmlcov
-          path: htmlcov
-          if-no-files-found: error
-
-      - name: Upload badges artifact
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: badges
-          path: badges
-          if-no-files-found: error
 
       - name: Upload pages artifact
         if: always()
