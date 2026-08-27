@@ -450,8 +450,8 @@ class DeferredAction(AbstractContextManager):
 
 
 def simplify_chunks(
-    chunks: tuple[tuple[int, ...], ...] | tuple[int, ...],
-) -> tuple[int, ...]:
+    chunks: tuple[tuple[int, ...], ...] | tuple[int, ...] | None,
+) -> tuple[int, ...] | None:
     """
     Returns the simplified chunks representation (tuple[int,...]) from the given chunks.
     Asserts that all the values for each dimension are the same, except the last.
@@ -477,6 +477,8 @@ def simplify_chunks(
         (1, 2, 3)
 
     """
+    if chunks is None:
+        return None
     result = []
     for c in chunks:
         if isinstance(c, int):

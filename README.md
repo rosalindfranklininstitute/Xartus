@@ -11,7 +11,7 @@ SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 ![xartus-license](./badges/xartus-license.svg)
 
 ![tests](./badges/tests.svg)
-![skipped](./badges/skiped.svg)
+![skipped](./badges/skipped.svg)
 ![coverage](./badges/coverage.svg)
 ![last-run](./badges/last-run.svg)
 

@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 
 import logging
-from xartus.lib.utils import DeferredAction
+from xartus.lib.utils import DeferredAction, simplify_chunks
 from pathlib import Path
 from .exceptions import InvalidEntryError, EntryExistsError
 from typing import Any, Iterable
@@ -97,7 +97,7 @@ def _write_dataarray(
         sname,
         shape=dataarray.shape,
         dtype=dataarray.dtype,
-        chunks=dataarray.chunks,
+        chunks=simplify_chunks(dataarray.chunks),
     )
     nx_data.attrs["signal"] = sname
 
