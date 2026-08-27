@@ -12,8 +12,6 @@
 import sys
 import os
 from pathlib import Path
-from nexus_pixel_man_test_data import Man2DDataSource, ManData, data_files
-from xartus.api import data_convert
 
 sys.path.insert(0, str(Path("..").absolute()))
 
@@ -53,23 +51,5 @@ html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 
 # --- Generate test data ---
-
-man_file = data_files()["man1"]
-man_data = ManData()
-man_data_source = Man2DDataSource(
-    man_data,
-    multipliers=dict(x=0.1, y=0.1, mz=0.1, time=1.0, error=1.0),
-)
 filename = Path(__file__).resolve().parent / "test_data.nxs"
-if not filename.exists():
-    process_args = data_convert.ProcessArgs(
-        in_path=man_file,
-        out_path=filename,
-        chunk_max_byte_count=1024 * 1024,
-        memory_max_byte_count=1024 * 1024 * 1024,
-        data_source=man_data_source,
-    )
-    data_convert.process(process_args, {})
-
-
 os.environ["DOCS_SOURCE_DIR"] = str(filename.parent)
