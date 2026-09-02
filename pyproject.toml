@@ -67,7 +67,6 @@ build-backend = "uv_build"
 default-groups = ['dev', 'doc']
 
 [tool.uv.sources]
-argsui = { path = "../argsui", editable = true }
 nexus_pixel_man_test_data = { path = "../nexus_pixel_man_test_data/", editable = true }
 
 [tool.ruff]

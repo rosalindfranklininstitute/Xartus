@@ -2060,7 +2060,7 @@ doc = [
 
 [package.metadata]
 requires-dist = [
-    { name = "argsui", editable = "../argsui" },
+    { name = "argsui", specifier = ">=0.2.0" },
     { name = "dask", specifier = ">=2026.3.0" },
     { name = "h5py", specifier = ">=3.15.1" },
     { name = "hdf5plugin", specifier = ">=7.1.0" },
