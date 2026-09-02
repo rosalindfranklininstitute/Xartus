@@ -36,13 +36,13 @@ class Chunk(list[slice]):
                [10, 11, 12, 13, 14],
                [15, 16, 17, 18, 19],
                [20, 21, 22, 23, 24],
-               [25, 26, 27, 28, 29]], shape=(6, 5))
+               [25, 26, 27, 28, 29]])
 
         >>> array[*chunk]
         array([[ 7,  8],
                [12, 13],
                [17, 18],
-               [22, 23]], shape=(4, 2))
+               [22, 23]])
     """
 
     def __repr__(self) -> str:
@@ -52,10 +52,12 @@ class Chunk(list[slice]):
         return f"({', '.join(parts)})"
 
     def range(self, index: int) -> range:
-        return range(self[index].start, self[index].stop, self[index].step)
+        slc = self[index]
+        return range(slc.start, slc.stop, slc.step if slc.step is not None else 1)
 
     def arange(self, index: int) -> np.ndarray:
-        return np.arange(self[index].start, self[index].stop, self[index].step)
+        slc = self[index]
+        return np.arange(slc.start, slc.stop, slc.step if slc.step is not None else 1)
 
     @property
     def start(self) -> tuple[int, ...]:

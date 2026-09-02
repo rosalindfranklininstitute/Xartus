@@ -13,12 +13,12 @@ dependencies = [
     "argsui @ https://github.com/rosalindfranklininstitute/argsUI/releases/download/v0.2.0/argsui-0.2.0.tar.gz#sha256:881398964919fa054721fe42da582937d2f0230f8b27152232cbfb09670b2f63",
     "h5py>=3.15.1",
     "matplotlib>=3.10.8",
-    "nexusformat>=2.0.1",
     "numpy>=2.4.2",
     "sparse>=0.18.0",
     "numpy>=2.4.6",
     "tqdm>=4.67.3",
     "xarray>=2026.7.0",
+    "hdf5plugin>=7.1.0",
 ]
 license = "LicenseRef-RFI-Apache-2.0-Commons-clause"
 license-files = ["LICENSES/*"]

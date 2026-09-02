@@ -14,6 +14,8 @@ import xarray as xr
 from xarray.backends import BackendEntrypoint
 import numpy as np
 
+from .nxs import create_nxfield, create_nxgroup
+
 logger = logging.getLogger(__name__)
 
 
@@ -83,8 +85,7 @@ def _write_dataarray(
         message = f"Cannot create {name} in {group.name}: it already exists."
         raise EntryExistsError(message)
 
-    nx_data: h5py.Group = group.create_group(name)
-    nx_data.attrs["NX_class"] = "NXdata"
+    nx_data: h5py.Group = create_nxgroup(group, name, nx_class="NXdata")
 
     for k, v in dataarray.attrs.items():
         nx_data.attrs[k] = v
@@ -93,7 +94,8 @@ def _write_dataarray(
         sname = dataarray.attrs["signal"]
     else:
         sname = signal_name[group.name, name]
-    signal = nx_data.create_dataset(
+    signal = create_nxfield(
+        nx_data,
         sname,
         shape=dataarray.shape,
         dtype=dataarray.dtype,
@@ -113,7 +115,8 @@ def _write_dataarray(
     for coord in dataarray.coords.values():
         indices = [int(ii) for ii, d in enumerate(dataarray.dims) if d in coord.dims]
         nx_data.attrs[f"{coord.name}_indices"] = indices
-        axis = nx_data.create_dataset(
+        axis = create_nxfield(
+            nx_data,
             coord.name,
             shape=coord.shape,
             dtype=coord.dtype,
@@ -459,13 +462,6 @@ def insert_into_axes(axes: list[str], axis: list[str]) -> list[str]:
 
 
 class NexusEntrypoint(BackendEntrypoint):
-    def __init__(self):
-        self.nx_file: None | h5py.File = None
-        self.filename: None | Path = None
-
-    def __del__(self):
-        self._close()
-
     def open_dataarray(
         self,
         filename_or_obj,
@@ -489,26 +485,26 @@ class NexusEntrypoint(BackendEntrypoint):
         # https://github.com/pydata/xarray/issues/10562
         raise NotImplementedError()
         try:
-            should_close = self._open(filename_or_obj)
-            assert self.nx_file is not None
+            should_close, nx_file = self._open(filename_or_obj)
+            assert nx_file is not None
 
             if data_path is None:
                 path = "/"
-                while "signal" not in self.nx_file[path].attrs:
-                    if "default" not in self.nx_file[path].attrs:
+                while "signal" not in nx_file[path].attrs:
+                    if "default" not in nx_file[path].attrs:
                         raise InvalidEntryError("Could not find default signal.")
-                    path = f"{path.removesuffix('/')}/{self.nx_file[path].attrs['default']}"
-                if "signal" not in self.nx_file[path].attrs:
+                    path = f"{path.removesuffix('/')}/{nx_file[path].attrs['default']}"
+                if "signal" not in nx_file[path].attrs:
                     raise InvalidEntryError("Could not find default signal.")
                 data_path = path
 
-            darray = self._read_nxdata(data_path)
+            darray = self._read_nxdata(nx_file, data_path)
 
             if should_close:
-                darray.set_close(self._close)
+                darray.set_close(nx_file.close)
 
         except:
-            self._close()
+            nx_file.close()
             raise
         else:
             return darray
@@ -533,33 +529,33 @@ class NexusEntrypoint(BackendEntrypoint):
             Returns a xarray.Dataset containing a data array.
         """
         try:
-            should_close = self._open(filename_or_obj)
-            assert self.nx_file is not None
+            should_close, nx_file = self._open(filename_or_obj)
+            assert nx_file is not None
 
             if entry_path is None:
                 path = "/"
-                while "signal" not in self.nx_file[path].attrs:
-                    if "default" not in self.nx_file[path].attrs:
+                while "signal" not in nx_file[path].attrs:
+                    if "default" not in nx_file[path].attrs:
                         raise InvalidEntryError("Could not find default signal.")
-                    path = f"{path.removesuffix('/')}/{self.nx_file[path].attrs['default']}"
-                if "signal" not in self.nx_file[path].attrs:
+                    path = f"{path.removesuffix('/')}/{nx_file[path].attrs['default']}"
+                if "signal" not in nx_file[path].attrs:
                     raise InvalidEntryError("Could not find default signal.")
                 entry_path = path
 
             if (
-                "NX_class" in self.nx_file[entry_path].attrs
-                and self.nx_file[entry_path].attrs["NX_class"] == "NXdata"
+                "NX_class" in nx_file[entry_path].attrs
+                and nx_file[entry_path].attrs["NX_class"] == "NXdata"
             ):
-                darray = self._read_nxdata(entry_path)
+                darray = self._read_nxdata(nx_file, entry_path)
                 ds = xr.Dataset({darray.name: darray})
             else:
-                ds = self._read_all_data_on_nxentry(entry_path)
+                ds = self._read_all_data_on_nxentry(nx_file, entry_path)
 
             if should_close:
-                ds.set_close(self._close)
+                ds.set_close(nx_file.close)
 
         except:
-            self._close()
+            nx_file.close()
             raise
         else:
             return ds
@@ -588,57 +584,55 @@ class NexusEntrypoint(BackendEntrypoint):
             Returns a xarray.DataTree representing the NeXus data rooted at root.
         """
         try:
-            should_close = self._open(filename_or_obj)
-            assert self.nx_file is not None
+            should_close, nx_file = self._open(filename_or_obj)
+            assert nx_file is not None
 
-            root_data = self._read_all_data_on_nxentry(root)
+            root_data = self._read_all_data_on_nxentry(nx_file, root)
             tree_root = xr.DataTree(dataset=root_data)
             base_path = root.removesuffix("/")
-            for path in self.nx_file[root]:
+            for path in nx_file[root]:
                 entry_path = f"{base_path}/{path}"
-                nx_class = self.nx_file[entry_path].attrs["NX_class"]
+                nx_class = nx_file[entry_path].attrs["NX_class"]
                 match nx_class:
                     case "NXdata":
                         pass  # Already read
                     case "NXentry" | "NXsubentry":
-                        tree_root[path] = self.open_datatree(
-                            self.nx_file, root=entry_path
-                        )
+                        tree_root[path] = self.open_datatree(nx_file, root=entry_path)
                     case _:
                         tree_root[path] = xr.DataTree(
-                            xr.Dataset(attrs=dict(self.nx_file[entry_path].attrs))
+                            xr.Dataset(attrs=dict(nx_file[entry_path].attrs))
                         )
 
             if should_close:
-                tree_root.set_close(self._close)
+                tree_root.set_close(nx_file.close)
         except:
-            self._close()
+            nx_file.close()
             raise
         else:
             return tree_root
 
-    def _read_nxdata(self, data_path) -> xr.DataArray:
-        assert self.nx_file is not None
+    def _read_nxdata(self, nx_file: h5py.File, data_path: str) -> xr.DataArray:
+        assert nx_file is not None
 
-        if self.nx_file[data_path].attrs["NX_class"] != "NXdata":
-            message = f"Expected {self.filename}:{data_path} to be NXdata."
+        if nx_file[data_path].attrs["NX_class"] != "NXdata":
+            message = f"Expected {nx_file.filename}:{data_path} to be NXdata."
             raise InvalidEntryError(message)
 
-        path_attrs = dict(self.nx_file[data_path].attrs)
+        path_attrs = dict(nx_file[data_path].attrs)
         del path_attrs["NX_class"]
         del path_attrs["axes"]
         path_attrs["signal"]
 
-        signal = self.nx_file[data_path].attrs["signal"]
-        axes: list[str] = self.nx_file[data_path].attrs["axes"]
+        signal = nx_file[data_path].attrs["signal"]
+        axes: list[str] = nx_file[data_path].attrs["axes"]
 
         inner_coords: dict[str, tuple[tuple[str, ...], Any, dict[str, Any]]] = {}
-        for name in self.nx_file[data_path]:
+        for name in nx_file[data_path]:
             index_path = f"{name}_indices"
-            if index_path in self.nx_file[data_path].attrs:
+            if index_path in nx_file[data_path].attrs:
                 del path_attrs[index_path]
 
-                inx = self.nx_file[data_path].attrs[index_path]
+                inx = nx_file[data_path].attrs[index_path]
                 if isinstance(inx, np.integer):
                     inx = [inx]
                 if not isinstance(inx, Iterable):
@@ -649,15 +643,16 @@ class NexusEntrypoint(BackendEntrypoint):
                 coord_dims = tuple([axes[i] for i in inx])
 
                 axis_path = f"{data_path}/{name}"
-                axis_attrs = dict(self.nx_file[axis_path].attrs)
+                axis_attrs = dict(nx_file[axis_path].attrs)
+                del axis_attrs["NX_class"]
 
-                chunks = self.nx_file[axis_path].chunks
+                chunks = nx_file[axis_path].chunks
                 if chunks is None:
-                    if self.nx_file[axis_path].dtype == "O":
-                        chunks = self.nx_file[axis_path].shape
+                    if nx_file[axis_path].dtype == "O":
+                        chunks = nx_file[axis_path].shape
                     else:
                         chunks = "auto"
-                values = da.from_array(self.nx_file[axis_path], chunks=chunks)
+                values = da.from_array(nx_file[axis_path], chunks=chunks)
 
                 inner_coords[name] = (
                     coord_dims,
@@ -666,29 +661,31 @@ class NexusEntrypoint(BackendEntrypoint):
                 )
         signal_path = f"{data_path}/{signal}"
         name = data_path.removesuffix("/").split("/")[-1]
-        chunks = self.nx_file[signal_path].chunks or "auto"
+        chunks = nx_file[signal_path].chunks or "auto"
         return xr.DataArray(
-            da.from_array(self.nx_file[signal_path], chunks=chunks),
+            da.from_array(nx_file[signal_path], chunks=chunks),
             name=name,
             dims=axes,
             coords=inner_coords,
             attrs=path_attrs,
         )
 
-    def _read_all_data_on_nxentry(self, entry_path: str) -> xr.Dataset:
-        assert self.nx_file is not None
+    def _read_all_data_on_nxentry(
+        self, nx_file: h5py.File, entry_path: str
+    ) -> xr.Dataset:
+        assert nx_file is not None
 
-        root_attrs = dict(self.nx_file[entry_path].attrs)
-        if "NX_class" not in self.nx_file[entry_path].attrs:
-            if self.nx_file[entry_path].name != "/":
-                message = f"Expected {self.filename}:{entry_path} to be file root or have NX_class."
+        root_attrs = dict(nx_file[entry_path].attrs)
+        if "NX_class" not in nx_file[entry_path].attrs:
+            if nx_file[entry_path].name != "/":
+                message = f"Expected {nx_file.filename}:{entry_path} to be file root or have NX_class."
                 raise InvalidEntryError(message)
-        elif self.nx_file[entry_path].attrs["NX_class"] not in (
+        elif nx_file[entry_path].attrs["NX_class"] not in (
             "NXroot",
             "NXentry",
             "NXsubentry",
         ):
-            message = f"Expected {self.filename}:{entry_path} to be NXroot, NXentry or NXsubentry."
+            message = f"Expected {nx_file.filename}:{entry_path} to be NXroot, NXentry or NXsubentry."
             raise InvalidEntryError(message)
         else:
             del root_attrs["NX_class"]
@@ -697,40 +694,33 @@ class NexusEntrypoint(BackendEntrypoint):
 
         base_path = entry_path.removesuffix("/")
 
-        for path in self.nx_file[entry_path]:
+        for path in nx_file[entry_path]:
             sub_path = f"{base_path}/{path}"
-            nx_class = self.nx_file[sub_path].attrs["NX_class"]
+            nx_class = nx_file[sub_path].attrs["NX_class"]
             if nx_class == "NXdata":
-                entry_array = self._read_nxdata(sub_path)
+                entry_array = self._read_nxdata(nx_file, sub_path)
                 entry_name = path
                 entries[entry_name] = entry_array
         return xr.Dataset(data_vars=entries, attrs=root_attrs)
 
-    def _open(self, filename_or_obj) -> bool:
+    def _open(self, filename_or_obj) -> tuple[bool, h5py.File]:
         """
         Opens the file, if appropriate.
         Returns True if the file was opened. False means that the file obj passed is being managed elsewhere.
 
-        self.nx_file is populated if the file is opened.
-        self.filename is always populated, even if the file was not reopened.
+        Returns:
+            should_close: whether the returned file was opened (True), or merely referenced (False).
+            nx_file: is populated if the file is opened.
 
         """
         should_close = True
         if isinstance(filename_or_obj, h5py.File):
             should_close = False
-            if self.nx_file is None:
-                self.nx_file = filename_or_obj
-            elif self.nx_file != filename_or_obj:
-                raise ValueError("The passed in file is different?!")
-            self.filename = filename_or_obj.filename
+            nx_file = filename_or_obj
         else:
-            self.nx_file = h5py.File(filename_or_obj, "r")
-            self.filename = filename_or_obj
-        return should_close
+            nx_file = h5py.File(filename_or_obj, "r")
 
-    def _close(self) -> None:
-        if self.nx_file is not None:
-            self.nx_file.close()
+        return should_close, nx_file
 
     open_dataarray_parameters = ["filename_or_obj", "drop_variables", "data_path"]
     open_dataset_parameters = ["filename_or_obj", "drop_variables", "entry_path"]

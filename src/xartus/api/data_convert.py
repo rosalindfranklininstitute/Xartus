@@ -13,7 +13,6 @@ from h5py import h5s
 from tqdm import tqdm
 
 import hdf5plugin
-from nexusformat.nexus import NXsubentry, NXdata
 
 from argsui import (
     no_arg_field,
@@ -39,9 +38,9 @@ from ..lib.nxs import (
     NexusFile,
     FieldOptions,
     NxAxis,
-    create_field,
+    create_nxfield,
     NxAxes,
-    create_group,
+    create_nxgroup,
 )
 from ..lib.utils import format_bytes
 from ..lib.dtypes import Intp1D, Bool1D
@@ -161,7 +160,9 @@ def choose_memory_buffer(
         read_count = 0
         for chunk in chunker.chunks():
             read_count += args.data_source.chunk_read_count(chunk.shape)
-        if read_count < min_read_count:
+        if (
+            read_count == min_read_count and name < min_read_name
+        ) or read_count < min_read_count:
             min_read_count = read_count
             min_read_name = name
     assert len(min_read_name) > 0
@@ -260,24 +261,24 @@ def provision_subentries(
     data_chunks: DataChunks,
     default_name: str,
 ) -> None:
-    nxs.root.attrs["default"] = default_name
+    nxs.entry.attrs["default"] = "data"
+
+    data_group = create_nxgroup(nxs.entry, "data", nx_class="NXsubentry")
+    data_group.attrs["default"] = default_name
 
     for name, chunker, signal in data_chunks.items():
-        nxs.root[name] = NXsubentry(
-            NXdata(
-                signal=create_field(
-                    name=signal.name,
-                    dtype=signal.dtype,
-                    shape=chunker.data_shape,
-                    compression=args.field_options.compression,
-                    compression_opts=args.field_options.compression_opts,
-                    chunks=chunker.chunk_shape,
-                    shuffle=args.field_options.shuffle,
-                    fillvalue=0,
-                ),
-            ),
+        signal_group = create_nxgroup(data_group, name, nx_class="NXdata")
+        signal_group.attrs["signal"] = signal.name
+        create_nxfield(
+            signal_group,
+            name=signal.name,
+            dtype=signal.dtype,
+            shape=chunker.data_shape,
+            compression=args.field_options.compression,
+            compression_opts=args.field_options.compression_opts,
+            chunks=chunker.chunk_shape,
+            shuffle=args.field_options.shuffle,
         )
-        nxs.root[name].attrs["default"] = "data"
 
 
 def provision_data_axis(
@@ -306,7 +307,7 @@ def provision_data_axis(
                             f"Expected {axis.dtype} values for {axis.name} but found {values.dtype}"
                         )
 
-                    nx_axis = NxAxis.create(
+                    nx_axis = NxAxis(
                         values=values,
                         name=axis.name,
                         indices=[axis.primary_axis],
@@ -325,21 +326,21 @@ def provision_data_axis(
                             f"Expected {axis.dtype} values for {axis.name} but found {values.dtype}"
                         )
 
-                    nx_axis = NxAxis.create(
-                        values=values,
+                    nx_axis = NxAxis(
                         name=axis.name,
                         indices=[axis.primary_axis],
                         units=axis.units,
+                        values=values,
                     )
                     if entry_name != _count_subentry_name():
-                        nx_axis_exact = NxAxis.create_empty(
+                        nx_axis_exact = NxAxis(
                             name=f"{axis.name}_exact",
                             indices=list(range(len(chunker.data_shape) + 1)),
-                            unit=axis.units,
+                            units=axis.units,
                             shape=chunker.data_shape,
                             compression=args.field_options.compression,
                             compression_opts=args.field_options.compression_opts,
-                            chunks=chunker.chunk_shape,
+                            chunk_shape=chunker.chunk_shape,
                             dtype=axis.dtype,
                             fillvalue=0
                             if np.issubdtype(axis.dtype, np.integer)
@@ -350,7 +351,7 @@ def provision_data_axis(
                         group_axes[axis.primary_axis].append(nx_axis)
                 case _:
                     raise InvalidAxisError(f"Unknown Axis type: {axis.axis_type}")
-        group_axes.add_to_group(nxs.root[entry_name]["data"])
+        group_axes.add_to_group(nxs.entry["data"][entry_name])
 
     return {ax.name: ax for ax in axis_definitions}, any_binned_axis
 
@@ -414,6 +415,10 @@ def provision_accumulation_subentries(
     final_accumulations: dict[str, Accumulation] = {}
     count_accumulations: dict[str, Accumulation] = {}
 
+    if len(accumulations) > 0:
+        acc_group = create_nxgroup(nxs.entry, "accumulations", nx_class="NXsubentry")
+        acc_group.attrs["default"] = list(accumulations.keys())[0]
+
     for ac_name, axes in accumulations.items():
         axis_to_accumulate: Bool1D = np.full(shape=(len(shape),), fill_value=False)
         edges = []
@@ -421,8 +426,8 @@ def provision_accumulation_subentries(
         group_axes = NxAxes()
         group_axes.append(
             [
-                NxAxis.create(
-                    values=["sum", "max"],
+                NxAxis(
+                    values=np.array(["sum", "max"]).astype("T"),
                     name="accumulator",
                     indices=[0],
                     units="",
@@ -463,7 +468,7 @@ def provision_accumulation_subentries(
                         f"Found conflicting sizes for {new_index}. Initially set to {acc_shape[new_index]} now trying to set to {count}",
                     )
 
-                nx_axis = NxAxis.create(
+                nx_axis = NxAxis(
                     values=values,
                     name=ax.name,
                     indices=[cast(int, new_index + 1)],
@@ -479,20 +484,21 @@ def provision_accumulation_subentries(
             shape=Shape(acc_shape.tolist()),
         )
 
-        nxs.root[ac_name] = NXsubentry(
-            NXdata(
-                signal=create_field(
-                    dtype=signal.dtype,
-                    shape=(2, *acc_shape),
-                    compression=args.field_options.compression,
-                    compression_opts=args.field_options.compression_opts,
-                    chunks=None,
-                    shuffle=args.field_options.shuffle,
-                    fillvalue=0,
-                ),
-            ),
+        data_group = create_nxgroup(acc_group, ac_name, nx_class="NXdata")
+        data_group.attrs["signal"] = signal.name
+
+        create_nxfield(
+            data_group,
+            signal.name,
+            dtype=signal.dtype,
+            shape=(2, *acc_shape),
+            compression=args.field_options.compression,
+            compression_opts=args.field_options.compression_opts,
+            chunks=None,
+            shuffle=args.field_options.shuffle,
+            fillvalue=0,
         )
-        group_axes.add_to_group(nxs.root[ac_name]["data"])
+        group_axes.add_to_group(data_group)
         if has_binned_axis:
             counts_name = f"{_count_subentry_name()}_{ac_name}"
             count_accumulations[counts_name] = Accumulation(
@@ -501,20 +507,20 @@ def provision_accumulation_subentries(
                 axis_edges=edges,
                 shape=Shape(acc_shape.tolist()),
             )
-            nxs.root[counts_name] = NXsubentry(
-                NXdata(
-                    signal=create_field(
-                        dtype=np.uint16,
-                        shape=(2, *acc_shape),
-                        compression=args.field_options.compression,
-                        compression_opts=args.field_options.compression_opts,
-                        chunks=None,
-                        shuffle=args.field_options.shuffle,
-                        fillvalue=0,
-                    ),
-                ),
+            data_group = create_nxgroup(acc_group, counts_name, nx_class="NXdata")
+            data_group.attrs["signal"] = "counts"
+            create_nxfield(
+                data_group,
+                name="counts",
+                dtype=np.uint16,
+                shape=(2, *acc_shape),
+                compression=args.field_options.compression,
+                compression_opts=args.field_options.compression_opts,
+                chunks=None,
+                shuffle=args.field_options.shuffle,
+                fillvalue=0,
             )
-            group_axes.add_to_group(nxs.root[counts_name]["data"])
+            group_axes.add_to_group(data_group)
 
     return final_accumulations, count_accumulations
 
@@ -537,7 +543,7 @@ def write_data(
         for data_entry in data_chunks.names:
             assert data_entry != _count_subentry_name()
             signal_name = data_chunks.signal(data_entry).name
-            nxs.root[data_entry].data[signal_name][*memory_chunk] = chunk_data
+            nxs.entry["data"][data_entry][signal_name][*memory_chunk] = chunk_data
         return chunk_data, None
 
     if chunk_data.coords.shape[1] == 0:
@@ -589,11 +595,11 @@ def write_data(
                 raise IndexError(f"Values provided for {name}, but axis is not binned.")
 
             if name == "signal":
-                ds = nxs.root[data_entry].data[signal.name]
+                ds = nxs.entry[f"data/{data_entry}/{signal.name}"]
             elif data_entry == _count_subentry_name():
                 continue
             else:
-                ds = nxs.root[data_entry].data[f"{name}_exact"]
+                ds = nxs.entry[f"data/{data_entry}/{name}_exact"]
                 axis_used[name] = True
 
             f_space = ds.id.get_space()
@@ -639,7 +645,7 @@ def add_items_to_group(items: dict[str, Any], root) -> None:
     for key, value in items.items():
         if isinstance(value, dict):
             if key not in root:
-                root[key] = create_group()
+                create_nxgroup(root, key)
             add_items_to_group(value, root[key])
         else:
             root.attrs[key] = value
@@ -784,5 +790,7 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
         ):
             if accumulation.has_data:
                 extra_slices = [slice(None) for _ in range(accumulation.ndim)]
-                nxs.root[name].data.signal[0, *extra_slices] = accumulation.sum_data
-                nxs.root[name].data.signal[1, *extra_slices] = accumulation.max_data
+                acc_group = nxs.entry[f"accumulations/{name}"]
+                signal_name = acc_group.attrs["signal"]
+                acc_group[signal_name][0, *extra_slices] = accumulation.sum_data
+                acc_group[signal_name][1, *extra_slices] = accumulation.max_data

@@ -51,7 +51,7 @@ class MultiCOO:
         >>> data.coords.T
         array([[0, 0],
                [0, 1],
-               [1, 0]], shape=(3, 2))
+               [1, 0]])
 
         >>> data.values
         {'signal': array([1, 1, 1])}
@@ -63,7 +63,7 @@ class MultiCOO:
         >>> data.coords.T
         array([[0, 0],
                [0, 1],
-               [1, 0]], shape=(3, 2))
+               [1, 0]])
 
         >>> data.values
         {'signal': array([1, 1, 2])}
@@ -74,7 +74,7 @@ class MultiCOO:
         >>> data.coords.T
         array([[0, 0],
                [0, 1],
-               [1, 0]], shape=(3, 2))
+               [1, 0]])
 
         >>> data.values
         {'signal': array([1, 1, 2])}

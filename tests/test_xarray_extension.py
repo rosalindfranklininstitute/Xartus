@@ -474,8 +474,8 @@ def test_datatree_there_and_back():
 def test_nexus_there_and_back(man_data_and_nexus):
     nx_file = man_data_and_nexus[1]
 
-    with h5py.File(nx_file, "r") as fle:
-        print_group(fle)
+    with h5py.File(nx_file, "r") as nxe:
+        print_group(nxe)
 
     path = Path("./test.nxs")
     with FileGuard(path, on_complete=FileAction.DELETE), DeferredAction() as defer:
@@ -504,9 +504,9 @@ def test_nexus_there_and_back(man_data_and_nexus):
                     assert_equal_recursive(initial_attrs, final_attrs)
                 except AssertionError as e:
                     message = f"Expected {initial_entry.name} to have same attrs as {final_entry.name}. But found a difference."
-                    print("initial_attrs: ", file=sys.stderr)
+                    print(f"{nxe.name}: initial_attrs: ", file=sys.stderr)
                     print(initial_attrs, file=sys.stderr)
-                    print("final_attrs: ", file=sys.stderr)
+                    print(f"{fle.name}: final_attrs: ", file=sys.stderr)
                     print(final_attrs, file=sys.stderr)
                     raise AssertionError(message) from e
 
@@ -525,4 +525,4 @@ def test_nexus_there_and_back(man_data_and_nexus):
                     compare(initial_entry, final_entry)
 
         with h5py.File(nx_file, "r") as nxe, h5py.File(path, "r") as fle:
-            compare(fle, nxe)
+            compare(nxe, fle)

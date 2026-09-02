@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
+from xartus.lib.utils import DeferredAction
 from xartus.lib.exceptions import InvalidEntryError
 from pathlib import Path
 
@@ -43,15 +44,22 @@ def man_data_and_nexus():
     filename.unlink()
 
 
-def test_default_dataarray(man_data_and_nexus):
+@pytest.fixture
+def defer():
+    with DeferredAction() as d:
+        yield d
+
+
+def test_default_dataarray(man_data_and_nexus, defer):
     nx_file = man_data_and_nexus[1]
 
     da = xr.open_dataarray(nx_file, engine="nexus")
+    defer.on_complete(da.close)
 
     assert da is not None
     assert isinstance(da, xr.DataArray)
 
-    assert da.name == "data"
+    assert da.name == "images"
     assert "x" in da.coords
     assert "y" in da.coords
     assert "mz" in da.coords
@@ -61,18 +69,17 @@ def test_default_dataarray(man_data_and_nexus):
     assert "y" in da.dims
     assert "mz" in da.dims
 
-    da.close()
 
-
-def test_specific_dataarray(man_data_and_nexus):
+def test_specific_dataarray(man_data_and_nexus, defer):
     nx_file = man_data_and_nexus[1]
 
-    da = xr.open_dataarray(nx_file, engine="nexus", entry_path="/entry/images/data")
+    da = xr.open_dataarray(nx_file, engine="nexus", entry_path="/entry/data/spectra")
+    defer.on_complete(da.close)
 
     assert da is not None
     assert isinstance(da, xr.DataArray)
 
-    assert da.name == "data"
+    assert da.name == "spectra"
     assert "x" in da.coords
     assert "y" in da.coords
     assert "mz" in da.coords
@@ -82,18 +89,17 @@ def test_specific_dataarray(man_data_and_nexus):
     assert "y" in da.dims
     assert "mz" in da.dims
 
-    da.close()
 
-
-def test_default_dataset(man_data_and_nexus):
+def test_default_dataset(man_data_and_nexus, defer):
     nx_file = man_data_and_nexus[1]
 
     ds = xr.open_dataset(nx_file, engine="nexus")
+    defer.on_complete(ds.close)
 
     assert ds is not None
     assert isinstance(ds, xr.Dataset)
 
-    assert "data" in ds
+    assert "images" in ds
     assert "x" in ds.coords
     assert "y" in ds.coords
     assert "mz" in ds.coords
@@ -103,18 +109,17 @@ def test_default_dataset(man_data_and_nexus):
     assert "y" in ds.dims
     assert "mz" in ds.dims
 
-    ds.close()
 
-
-def test_specific_dataset(man_data_and_nexus):
+def test_specific_dataset(man_data_and_nexus, defer):
     nx_file = man_data_and_nexus[1]
 
-    ds = xr.open_dataset(nx_file, engine="nexus", entry_path="/entry/images/")
+    ds = xr.open_dataset(nx_file, engine="nexus", entry_path="/entry/data/spectra")
+    defer.on_complete(ds.close)
 
     assert ds is not None
     assert isinstance(ds, xr.Dataset)
 
-    assert "data" in ds
+    assert "spectra" in ds
     assert "x" in ds.coords
     assert "y" in ds.coords
     assert "mz" in ds.coords
@@ -123,24 +128,23 @@ def test_specific_dataset(man_data_and_nexus):
     assert "x" in ds.dims
     assert "y" in ds.dims
     assert "mz" in ds.dims
-
-    ds.close()
 
 
 @pytest.mark.skip(
     reason="Specific dataarray backends are not, yet, supported by xarray."
 )
-def test_error_on_load_non_nxdata_dataset(man_data_and_nexus):
+def test_error_on_load_non_nxdata_dataset(man_data_and_nexus, defer):
     nx_file = man_data_and_nexus[1]
 
     with pytest.raises(InvalidEntryError, match="Expected .* to be NXdata"):
         xr.open_dataset(nx_file, engine="nexus", entry_path="/entry/")
 
 
-def test_whole_tree(man_data_and_nexus):
+def test_whole_tree(man_data_and_nexus, defer):
     nx_file = man_data_and_nexus[1]
 
     dt = xr.open_datatree(nx_file, engine="nexus")
+    defer.on_complete(dt.close)
 
     assert "entry" in dt
 
@@ -153,35 +157,34 @@ def test_whole_tree(man_data_and_nexus):
     assert "force_sparse" in dt["entry/experiment"].attrs
     assert not dt["entry/experiment"].has_data
 
-    assert "images" in dt["entry"]
-    assert "spectra" in dt["entry"]
-    assert "total_image" in dt["entry"]
-    assert "total_spectra" in dt["entry"]
+    assert "data" in dt["entry"]
+    assert "accumulations" in dt["entry"]
 
-    assert "data" in dt["entry/images"]
-    assert "data" in dt["entry/spectra"]
+    assert "images" in dt["entry/data"]
+    assert "spectra" in dt["entry/data"]
 
-    assert "x" in dt["entry/images/data"].coords
-    assert "time" in dt["entry/images/data"].coords
-    assert "y" in dt["entry/images/data"].coords
-    assert "mz" in dt["entry/images/data"].coords
-    assert "error" in dt["entry/images/data"].coords
+    assert "total_image" in dt["entry/accumulations"]
+    assert "total_spectra" in dt["entry/accumulations"]
 
-    dt.close()
+    assert "x" in dt["entry/data/images"].coords
+    assert "time" in dt["entry/data/images"].coords
+    assert "y" in dt["entry/data/images"].coords
+    assert "mz" in dt["entry/data/images"].coords
+    assert "error" in dt["entry/data/images"].coords
 
 
-def test_subtree(man_data_and_nexus):
+def test_subtree(man_data_and_nexus, defer):
     nx_file = man_data_and_nexus[1]
 
-    dt = xr.open_datatree(nx_file, engine="nexus", root="/entry/images")
-    assert "data" in dt
-    dt.close()
+    dt = xr.open_datatree(nx_file, engine="nexus", root="/entry/data")
+    defer.on_complete(dt.close)
+    assert "images" in dt
 
 
-def test_error_on_load_non_nxentry_datatree(man_data_and_nexus):
+def test_error_on_load_non_nxentry_datatree(man_data_and_nexus, defer):
     nx_file = man_data_and_nexus[1]
 
     with pytest.raises(
         InvalidEntryError, match="Expected .* to be NXroot, NXentry or NXsubentry"
     ):
-        xr.open_datatree(nx_file, engine="nexus", root="/entry/images/data")
+        xr.open_datatree(nx_file, engine="nexus", root="/entry/data/images")
