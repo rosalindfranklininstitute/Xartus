@@ -18,6 +18,7 @@
 
    Notebooks/xarray.md
    Notebooks/imshow_sparse.md
+   Notebooks/data_convert.md
    api
    license
 

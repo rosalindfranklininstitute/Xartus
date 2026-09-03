@@ -91,6 +91,14 @@ class ProcessArgs(
         default=1024 * 1024 * 1024 * 4,
     )
 
+    show_progress: bool = arg_field(
+        "--no-show-progress",
+        arg_type=ArgType.EXPLICIT_ONLY,
+        action="store_true",
+        help="If true (if not specified) tqdm is used to show the progress. Otherwise no progress is shown.",
+        default=True,
+    )
+
     data_source: AbstractDataSource = no_arg_field(default=None)
 
     field_options: FieldOptions = no_arg_field(
@@ -527,12 +535,12 @@ def provision_accumulation_subentries(
 
 def write_data(
     nxs: NexusFile,
-    args: ProcessArgs,
     memory_chunk: Chunk,
     full_shape: Shape,
     binned_axes: list[Axis],
     chunk_data: np.ndarray | MultiCOO,
     data_chunks: DataChunks,
+    show_progress: bool,
 ) -> tuple[np.ndarray, None] | tuple[sparse.COO, sparse.COO]:
     if isinstance(chunk_data, np.ndarray):
         if len(binned_axes) != 0:
@@ -589,7 +597,9 @@ def write_data(
 
     axis_names = [axis.name for axis in binned_axes]
     axis_used = dict.fromkeys(axis_names, False)
-    for data_entry, _, signal in tqdm(data_chunk_values, desc="Processing data chunks"):
+    for data_entry, _, signal in tqdm(
+        data_chunk_values, desc="Processing data chunks", disable=not show_progress
+    ):
         for name in chunk_data.values:
             if name != "signal" and name not in axis_names:
                 raise IndexError(f"Values provided for {name}, but axis is not binned.")
@@ -627,11 +637,14 @@ def accumulate_data(
     memory_chunk: Chunk,
     data: np.ndarray | sparse.COO,
     counts: None | sparse.COO,
+    show_progress: bool,
 ) -> None:
 
     total = len(accumulations) + len(count_accumulations) if counts is not None else 0
 
-    with tqdm(total=total, desc="Accumulating", leave=False) as progress:
+    with tqdm(
+        total=total, desc="Accumulating", leave=False, disable=not show_progress
+    ) as progress:
         for accumulation in accumulations.values():
             accumulation.add(data, memory_chunk)
             progress.update()
@@ -730,7 +743,9 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
                 f"    {' ' * 10}: chunk size: {np.prod(chunker.chunk_shape)} items ({format_bytes(np.prod(chunker.chunk_shape) * width)}).",
             )
 
-        with tqdm(desc="Overall reads", total=total_read_count) as overall_reads_timer:
+        with tqdm(
+            desc="Overall reads", total=total_read_count, disable=not args.show_progress
+        ) as overall_reads_timer:
             data_source_lock = Lock()
             accumulation_lock = Lock()
             nexus_file_lock = Lock()
@@ -746,12 +761,12 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
                 with nexus_file_lock:
                     local_store.written_signal, local_store.written_count = write_data(
                         nxs,
-                        args,
                         memory_chunk,
                         full_shape,
                         binned_axis,
                         local_store.chunk_data,
                         data_chunks,
+                        args.show_progress,
                     )
                     del local_store.chunk_data
 
@@ -762,6 +777,7 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
                         memory_chunk,
                         local_store.written_signal,
                         local_store.written_count,
+                        args.show_progress,
                     )
 
             outer_chunks = list(memory_chunks.chunks())
@@ -776,6 +792,7 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
                     total=len(outer_chunks),
                     desc="Memory chunks",
                     leave=True,
+                    disable=not args.show_progress,
                 ):
                     try:
                         memory_chunk.result()
@@ -787,6 +804,7 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
         for name, accumulation in tqdm(
             [*_items(accumulations), *_items(count_accumulations)],
             desc="Writing accumulations",
+            disable=not args.show_progress,
         ):
             if accumulation.has_data:
                 extra_slices = [slice(None) for _ in range(accumulation.ndim)]

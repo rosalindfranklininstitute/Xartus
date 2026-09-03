@@ -35,7 +35,7 @@ from xartus.lib.h5_printer import print_group
 import h5py
 
 with h5py.File(filename, 'r') as fle:
-  print_group(fle['/entry/images'])
+  print_group(fle['/entry/data'])
 
 ```
 
@@ -44,10 +44,10 @@ Now load it into an `xarray`:
 dataset = xr.open_dataset(
           filename,
           engine="nexus", 
-          entry_path="/entry/images",
+          entry_path="/entry/data",
           )
 print(dataset)
-da = dataset['data']
+da = dataset['images']
 print(da)
 ```
 

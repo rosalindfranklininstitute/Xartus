@@ -7,11 +7,18 @@ from . import utils as utils
 from . import unidec as unidec
 from . import xarray_backend as xarray_backend
 from .chunker import count_chunks_to_cover, Chunker
-from .bounds import ContainedBounds, Chunk
+from .bounds import ContainedBounds, Chunk, Shape
 from .h5_printer import print_group
 from .timers import JSONTimer
 from .multi_coo import MultiCOO
-from .data_source import Signal, AxisType, Axis, UnknownAxisError, AbstractDataSource
+from .data_source import (
+    Signal,
+    AxisType,
+    Axis,
+    UnknownAxisError,
+    AbstractDataSource,
+    DataShape,
+)
 from .exceptions import (
     NoDataError,
     InnerDataNotContainedError,

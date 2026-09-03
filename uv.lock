@@ -2029,6 +2029,7 @@ dev = [
 doc = [
     { name = "myst-nb" },
     { name = "myst-parser" },
+    { name = "pillow" },
     { name = "sphinx-autodoc-typehints" },
     { name = "sphinx-rtd-theme" },
 ]
@@ -2064,6 +2065,7 @@ dev = [
 doc = [
     { name = "myst-nb", specifier = ">=1.4.0" },
     { name = "myst-parser", specifier = ">=5.1.0" },
+    { name = "pillow", specifier = ">=12.1.1" },
     { name = "sphinx-autodoc-typehints", specifier = ">=3.13.2" },
     { name = "sphinx-rtd-theme", specifier = ">=3.1.0" },
 ]
