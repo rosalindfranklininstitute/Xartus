@@ -18,7 +18,7 @@ dependencies = [
     "tqdm>=4.67.3",
     "xarray>=2026.7.0",
     "hdf5plugin>=7.1.0",
-    "argsui>=0.2.0",
+    "argsui>=0.2.1",
 ]
 license = "LicenseRef-RFI-Apache-2.0-Commons-clause"
 license-files = ["LICENSES/*"]
