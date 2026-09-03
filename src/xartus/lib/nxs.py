@@ -11,8 +11,6 @@ import numpy.typing as npt
 
 from .bounds import Shape
 
-from icecream import ic
-
 
 def create_nxfield(
     parent: h5py.Group,
@@ -93,7 +91,6 @@ class NxAxis:
         if self.values is not None:
             if self.dtype is not None:
                 if not np.issubdtype(self.values.dtype, self.dtype):
-                    ic(self.values.dtype, self.dtype)
                     raise ValueError("Provided values.dtype and dtype did not match.")
             else:
                 self.dtype = self.values.dtype
