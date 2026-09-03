@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   pages:
@@ -38,11 +40,9 @@ jobs:
           make html
 
       - name: Upload pages artifact
-        if: always()
         uses: actions/upload-pages-artifact@v5
         with:
           path: build/html
-          if-no-files-found: error
           
   deploy:
     environment:
