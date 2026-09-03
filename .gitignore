@@ -2,6 +2,12 @@
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 
+# Security
+
+publish_token.txt
+
+# general
+
 __pycache__/
 tmp_data/
 *.toml
