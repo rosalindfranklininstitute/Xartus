@@ -10,9 +10,8 @@ from pathlib import Path
 import numpy as np
 import h5py
 
-from xartus.lib.chunker import count_chunks_to_cover
 from xartus.api import data_convert
-from xartus.lib.data_source import Axis, AxisType
+from xartus.lib import Axis, AxisType, count_chunks_to_cover, check_nexus
 
 from nexus_pixel_man_test_data import Man2DDataSource, ManData, data_files
 
@@ -126,6 +125,8 @@ def get_dataset_total_and_used_chunks(fle, name):
 def check_basic_axis_correct(
     fle, man_data_source: Man2DDataSource, max_chunk_item_count
 ):
+    check_nexus(fle)
+
     for data_name in ["images", "spectra"]:
         assert f"/entry/data/{data_name}/signal" in fle
         for axis in man_data_source.axes.values():
@@ -216,7 +217,7 @@ def check_binned_correct(
                 )
                 assert all(
                     fle[f"/entry/data/{data_name}"].attrs[f"{axis.name}_exact_indices"]
-                    == list(range(4))
+                    == list(range(3))
                 )
                 exact = fle[f"/entry/data/{data_name}/{axis.name}_exact"][:, :, :]
                 desired = np.tile(
@@ -359,7 +360,7 @@ def test_all_dimensions_binned(nx_file, man_file, man_data):
                 )
                 assert all(
                     fle[f"/entry/data/{data_name}"].attrs[f"{axis.name}_exact_indices"]
-                    == list(range(4))
+                    == list(range(3))
                 )
                 data_part = fle[f"/entry/data/{data_name}/signal"]
                 assert np.sum(data_part) == np.sum(man_data_source.man_data.dense)
@@ -519,48 +520,3 @@ def test_binned_multi_axis(
             max_count_per_bin=mz_binning,
             should_be_sparse=chunk_max_byte_count == 240 * 2,
         )
-
-
-def test_valid_nexus(nx_file, man_file, man_data):
-    man_data_source = Man2DDataSource(man_data)
-
-    process_args = data_convert.ProcessArgs(
-        in_path=man_file,
-        out_path=nx_file,
-        chunk_max_byte_count=1024 * 8,
-        memory_max_byte_count=1024 * 1024 * 1024,
-        data_source=man_data_source,
-    )
-    data_convert.process(process_args, {})
-
-    assert nx_file.exists()
-
-    def recurse(group):
-        assert "NX_class" in group.attrs
-        match group.attrs["NX_class"]:
-            case "NXroot":
-                assert group.name == "/"
-                assert "default" in group.attrs
-            case "NXentry":
-                assert group.parent.attrs["NX_class"] == "NXroot"
-                assert "default" in group.attrs
-            case "NXsubentry":
-                assert group.parent.attrs["NX_class"] in ("NXentry", "NXsubentry")
-                assert "default" in group.attrs
-            case "NXdata":
-                assert group.parent.attrs["NX_class"] in ("NXentry", "NXsubentry")
-                assert "signal" in group.attrs
-                assert "axes" in group.attrs
-            case "NXfield":
-                assert isinstance(group, h5py.Dataset)
-            case _:
-                for value in group.values():
-                    assert isinstance(value, h5py.Group)
-
-        if isinstance(group, h5py.Group):
-            for name in list(group):
-                subgroup = group[name]
-                recurse(subgroup)
-
-    with h5py.File(nx_file, "r") as fle:
-        recurse(fle["/"])

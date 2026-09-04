@@ -343,7 +343,7 @@ def provision_data_axis(
                     if entry_name != _count_subentry_name():
                         nx_axis_exact = NxAxis(
                             name=f"{axis.name}_exact",
-                            indices=list(range(len(chunker.data_shape) + 1)),
+                            indices=list(range(len(chunker.data_shape))),
                             units=axis.units,
                             shape=chunker.data_shape,
                             compression=args.field_options.compression,
