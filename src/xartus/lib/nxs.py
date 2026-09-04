@@ -41,7 +41,7 @@ def create_nxfield(
 def create_nxgroup(
     parent: h5py.Group,
     name: str,
-    nx_class: str = "NXgroup",
+    nx_class: str = "NXobject",
     **kwargs,
 ) -> h5py.Group:
     grp = parent.create_group(name, **kwargs)

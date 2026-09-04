@@ -107,6 +107,7 @@ allowed-unresolved-imports = ["nexusformat.nexus.tree.NXparameters" ,"nexusforma
 
 [tool.typos.default.extend-identifiers]
 fle = 'fle'
+DNE = 'DNE'
 
 [tool.typos.default]
 extend-ignore-re = [ 

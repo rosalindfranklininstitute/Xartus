@@ -11,6 +11,7 @@ from .bounds import ContainedBounds, Chunk, Shape
 from .h5_printer import print_group
 from .timers import JSONTimer
 from .multi_coo import MultiCOO
+from .multi_linspace import MultiLinspace
 from .data_source import (
     Signal,
     AxisType,
@@ -27,3 +28,4 @@ from .exceptions import (
     InvalidEntryError,
     EntryExistsError,
 )
+from .nexus_check import check_nexus
