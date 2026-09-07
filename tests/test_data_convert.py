@@ -13,7 +13,7 @@ import h5py
 from xartus.api import data_convert
 from xartus.lib import Axis, AxisType, count_chunks_to_cover, check_nexus
 
-from nexus_pixel_man_test_data import Man2DDataSource, ManData, data_files
+from nexus_pixel_man_test_data import Man2DDataSource, ManData
 
 import pytest
 
@@ -105,11 +105,6 @@ def nx_file():
         filename.unlink()
     yield filename
     filename.unlink()
-
-
-@pytest.fixture
-def man_file():
-    return data_files()["man1"]
 
 
 def get_dataset_total_and_used_chunks(fle, name):
@@ -275,11 +270,10 @@ dense_single_axis_params = Parameters(chunks=True)
 @pytest.mark.parametrize(
     dense_single_axis_params.args(), dense_single_axis_params.params()
 )
-def test_dense_single_axis(nx_file, man_file, man_data, chunk_max_byte_count):
+def test_dense_single_axis(nx_file, man_data, chunk_max_byte_count):
     man_data_source = Man2DDataSource(man_data)
 
     process_args = data_convert.ProcessArgs(
-        in_path=man_file,
         out_path=nx_file,
         chunk_max_byte_count=chunk_max_byte_count,
         memory_max_byte_count=1024 * 1024 * 1024,
@@ -296,7 +290,7 @@ def test_dense_single_axis(nx_file, man_file, man_data, chunk_max_byte_count):
         check_dense_correct(fle, man_data_source)
 
 
-def test_dense_multi_axis_single_chunk(nx_file, man_file, man_data):
+def test_dense_multi_axis_single_chunk(nx_file, man_data):
     man_data_source = Man2DDataSource(
         man_data,
         supplementary_axes=[
@@ -306,7 +300,6 @@ def test_dense_multi_axis_single_chunk(nx_file, man_file, man_data):
     )
 
     process_args = data_convert.ProcessArgs(
-        in_path=man_file,
         out_path=nx_file,
         chunk_max_byte_count=1024 * 1024,
         memory_max_byte_count=1024 * 1024 * 1024,
@@ -323,7 +316,7 @@ def test_dense_multi_axis_single_chunk(nx_file, man_file, man_data):
         check_dense_correct(fle, man_data_source)
 
 
-def test_all_dimensions_binned(nx_file, man_file, man_data):
+def test_all_dimensions_binned(nx_file, man_data):
     man_data_source = Man2DDataSource(
         man_data,
         supplementary_axes=[
@@ -336,7 +329,6 @@ def test_all_dimensions_binned(nx_file, man_file, man_data):
     )
 
     process_args = data_convert.ProcessArgs(
-        in_path=man_file,
         out_path=nx_file,
         chunk_max_byte_count=1024 * 1024,
         memory_max_byte_count=1024 * 1024 * 1024,
@@ -369,14 +361,13 @@ def test_all_dimensions_binned(nx_file, man_file, man_data):
         assert np.max(fle["/entry/data/item_counts/items_per_bin"][...]) == 8
 
 
-def test_sparse_all_exact(nx_file, man_file, man_data):
+def test_sparse_all_exact(nx_file, man_data):
     man_data_source = Man2DDataSource(
         man_data,
         force_sparse=True,
     )
 
     process_args = data_convert.ProcessArgs(
-        in_path=man_file,
         out_path=nx_file,
         chunk_max_byte_count=240 * 2,
         memory_max_byte_count=1024 * 1024 * 1024,
@@ -404,7 +395,6 @@ binned_params = Parameters(chunks=True, memory=True, bins=True, dtypes=True, mul
 @pytest.mark.parametrize(binned_params.args(), binned_params.params())
 def test_binned(
     nx_file,
-    man_file,
     man_data,
     chunk_max_byte_count,
     memory_max_byte_count,
@@ -420,7 +410,6 @@ def test_binned(
     )
 
     process_args = data_convert.ProcessArgs(
-        in_path=man_file,
         out_path=nx_file,
         chunk_max_byte_count=chunk_max_byte_count,
         memory_max_byte_count=memory_max_byte_count,
@@ -444,7 +433,7 @@ def test_binned(
         )
 
 
-def test_binned_multi_continuous_axis_single_chunk(nx_file, man_file, man_data):
+def test_binned_multi_continuous_axis_single_chunk(nx_file, man_data):
     man_data_source = Man2DDataSource(
         man_data,
         supplementary_axes=[
@@ -454,7 +443,6 @@ def test_binned_multi_continuous_axis_single_chunk(nx_file, man_file, man_data):
     )
 
     process_args = data_convert.ProcessArgs(
-        in_path=man_file,
         out_path=nx_file,
         chunk_max_byte_count=1024 * 1024,
         memory_max_byte_count=1024 * 1024 * 1024,
@@ -485,7 +473,7 @@ binned_multi_axis_params = Parameters(chunks=True, bins=True, dtypes=True, mult=
     binned_multi_axis_params.args(), binned_multi_axis_params.params()
 )
 def test_binned_multi_axis(
-    nx_file, man_file, man_data, chunk_max_byte_count, mz_binning, mz_dtype, mult
+    nx_file, man_data, chunk_max_byte_count, mz_binning, mz_dtype, mult
 ):
     man_data_source = Man2DDataSource(
         man_data,
@@ -498,7 +486,6 @@ def test_binned_multi_axis(
     )
 
     process_args = data_convert.ProcessArgs(
-        in_path=man_file,
         out_path=nx_file,
         chunk_max_byte_count=chunk_max_byte_count,
         memory_max_byte_count=1024 * 1024 * 1024,

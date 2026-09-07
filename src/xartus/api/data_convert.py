@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
+import argparse
 from typing import Any, Iterable, Generator, cast
 from threading import Lock, local
 import concurrent.futures as cfutures
@@ -8,11 +9,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import numpy as np
 import sparse
-from h5py import h5s
+import logging
 
 from tqdm import tqdm
 
 import hdf5plugin
+from h5py import h5s
 
 from argsui import (
     no_arg_field,
@@ -45,6 +47,8 @@ from ..lib.nxs import (
 from ..lib.utils import format_bytes
 from ..lib.dtypes import Intp1D, Bool1D
 
+logger = logging.getLogger(__name__)
+
 
 def _count_subentry_name() -> str:
     return "item_counts"
@@ -59,16 +63,6 @@ class ProcessArgs(
     ConfigFileArgs,
     InteractiveArgs,
 ):
-    in_path: Path = arg_field(
-        "-i",
-        "--input",
-        required=True,
-        arg_type=ArgType.EXPLICIT_ONLY,
-        help="The file to process.",
-        default=None,
-        type=FilePathType(must_exist=True),
-    )
-
     out_path: Path = arg_field(
         "-o",
         "--output",
@@ -92,9 +86,7 @@ class ProcessArgs(
     )
 
     show_progress: bool = arg_field(
-        "--no-show-progress",
-        arg_type=ArgType.EXPLICIT_ONLY,
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         help="If true (if not specified) tqdm is used to show the progress. Otherwise no progress is shown.",
         default=True,
     )
@@ -665,7 +657,6 @@ def add_items_to_group(items: dict[str, Any], root) -> None:
 
 
 def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
-    assert args.in_path.exists(), f"The input file {args.in_path} was not found"
 
     if args.field_options.max_bytes_per_chunk <= 0:
         args.field_options = FieldOptions(
@@ -713,33 +704,32 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
             ax for ax in axis_definitions.values() if ax.axis_type == AxisType.BINNED
         ]
 
-        print(f"Processing file {args.in_path}")
-        print(f" Writing results to {args.out_path}")
-        print(
+        logger.info(f"Writing results to {args.out_path}")
+        logger.info(
             f" Giving a final data shape of {full_shape} (Raw {format_bytes(np.prod(full_shape) * size_per_item)})",
         )
 
-        print(
+        logger.info(
             f"Using a memory chunk shape {memory_chunks.chunk_shape} and count {memory_chunks.chunk_count}.",
         )
-        print(
+        logger.info(
             f" Dense usage: {np.prod(memory_chunks.chunk_shape)} items ({format_bytes(np.prod(memory_chunks.chunk_shape) * size_per_item)}).",
         )
         if len(binned_axis) > 0:
-            print(
+            logger.info(
                 f" Binned usage: {int(np.prod(memory_chunks.chunk_shape) * density)} items ({format_bytes(np.prod(memory_chunks.chunk_shape) * size_per_item * density)}), worst case density {density:.2f}.",
             )
-        print(f" Memory limit set at {format_bytes(args.memory_max_byte_count)}.")
-        print("With data blocks:")
-        print(
+        logger.info(f" Memory limit set at {format_bytes(args.memory_max_byte_count)}.")
+        logger.info("With data blocks:")
+        logger.info(
             f"maximum chunk size ({format_bytes(args.field_options.max_bytes_per_chunk)})",
         )
         for name, chunker, signal in data_chunks.items():
             width = np.dtype(signal.dtype).itemsize
-            print(
+            logger.info(
                 f"    {name: >10}: chunk shape {chunker.chunk_shape} and total count {chunker.chunk_count} and memory count {count_chunks_to_cover(memory_chunks.chunk_shape, chunker.chunk_shape)}.",
             )
-            print(
+            logger.info(
                 f"    {' ' * 10}: chunk size: {np.prod(chunker.chunk_shape)} items ({format_bytes(np.prod(chunker.chunk_shape) * width)}).",
             )
 

@@ -13,11 +13,7 @@ from xartus.lib.utils import FileGuard, FileAction, DeferredAction
 import xarray as xr
 import numpy as np
 
-from nexus_pixel_man_test_data import Man2DDataSource, ManData, data_files
-
 import xartus.lib.xarray_backend  # noqa: F401 # Needed to register extensions
-from xartus.lib.data_source import Axis, AxisType
-from xartus.api import data_convert
 
 import pytest
 
@@ -62,34 +58,6 @@ def check_datatree(
     for child, ds in children.items():
         assert child in group
         check_dataset(ds, "NXsubentry", group[child], dims)
-
-
-@pytest.fixture(scope="module")
-def man_data_and_nexus():
-    man_file = data_files()["man1"]
-    man_data = ManData()
-    man_data_source = Man2DDataSource(
-        man_data,
-        supplementary_axes=[
-            Axis("time", 0, AxisType.EXACT, np.float32, "s"),
-            Axis("error", 2, AxisType.EXACT, np.float32, ""),
-        ],
-        multipliers=dict(x=0.1, y=0.1, mz=0.1, time=1.0, error=1.0),
-    )
-    filename = Path(__file__).parent / "man.nxs"
-    if filename.exists():
-        filename.unlink()
-
-    process_args = data_convert.ProcessArgs(
-        in_path=man_file,
-        out_path=filename,
-        chunk_max_byte_count=1024 * 1024,
-        memory_max_byte_count=1024 * 1024 * 1024,
-        data_source=man_data_source,
-    )
-    data_convert.process(process_args, {})
-    yield man_data, filename
-    filename.unlink()
 
 
 class NeXusAndPath(NamedTuple):
