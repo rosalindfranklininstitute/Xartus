@@ -8,7 +8,7 @@ def print_item(item, offset="", items=True) -> None:
 
     if "keys" in dir(item):
         offset_inc = "  |"
-        prefix = "\--"
+        prefix = "\\--"
     else:
         offset_inc = "   "
         prefix = "+--"
