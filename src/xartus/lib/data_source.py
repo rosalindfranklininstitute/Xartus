@@ -130,17 +130,17 @@ class AbstractDataSource(AbstractContextManager):
         Returns the axis that should be used when storing the data.
         For example simple image data (x,y, spectra):
 
-        axis(0) : Axis('x', 0, [], EXACT, 'um')
+        axis(0) : Axis('x', 0, EXACT, 'um')
 
-        axis(1) : Axis('y', 1, [], EXACT, 'um')
+        axis(1) : Axis('y', 1, EXACT, 'um')
 
         If is it exact:
 
-        axis(2) : Axis('mz', 2, [], EXACT, 'mz')
+        axis(2) : Axis('mz', 2, EXACT, 'mz')
 
         if it is only peaks:
 
-        axis(2) : Axis('mz', 2, [0,1], BINNED, 'mz')
+        axis(2) : Axis('mz', 2, BINNED, 'mz')
         """
 
     @abstractmethod

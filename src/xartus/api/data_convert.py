@@ -91,6 +91,11 @@ class ProcessArgs(
         default=True,
     )
 
+    dry_run: bool = arg_field(
+        action="store_true",
+        help="If true (if specified) no conversion will be done, but all the metadata will be read and displayed.",
+    )
+
     data_source: AbstractDataSource = no_arg_field(default=None)
 
     field_options: FieldOptions = no_arg_field(
@@ -286,8 +291,8 @@ def provision_data_axis(
     args: ProcessArgs,
     full_shape: Shape,
     data_chunks: DataChunks,
+    axis_definitions: list[Axis],
 ) -> tuple[dict[str, Axis], bool]:
-    axis_definitions = args.data_source.axis_definitions()
 
     any_binned_axis = False
     for entry_name, chunker, _ in data_chunks.items():
@@ -668,70 +673,74 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
     else:
         assert args.field_options.max_bytes_per_chunk == args.chunk_max_byte_count
 
+    full_shape, _, density = args.data_source.shape()
+
+    if any(s <= 0 for s in full_shape):
+        raise ValueError(
+            f"Invalid data shape {full_shape}. Each dimension must have at least 1 element."
+        )
+
+    memory_chunks, total_read_count, size_per_item, data_chunks, default_name = (
+        choose_memory_buffer_and_data_chunks(args, full_shape, density)
+    )
+    axis_definitions = args.data_source.axis_definitions()
+    binned_axis = [ax for ax in axis_definitions if ax.axis_type == AxisType.BINNED]
+
+    logger.info(
+        f" Giving a final data shape of {full_shape} (Raw {format_bytes(np.prod(full_shape) * size_per_item)})",
+    )
+
+    logger.info(
+        f"Using a memory chunk shape {memory_chunks.chunk_shape} and count {memory_chunks.chunk_count}.",
+    )
+    logger.info(
+        f" Dense usage: {np.prod(memory_chunks.chunk_shape)} items ({format_bytes(np.prod(memory_chunks.chunk_shape) * size_per_item)}).",
+    )
+    if len(binned_axis) > 0:
+        logger.info(
+            f" Binned usage: {int(np.prod(memory_chunks.chunk_shape) * density)} items ({format_bytes(np.prod(memory_chunks.chunk_shape) * size_per_item * density)}), worst case density {density:.2f}.",
+        )
+    logger.info(f" Memory limit set at {format_bytes(args.memory_max_byte_count)}.")
+    logger.info("With data blocks:")
+    logger.info(
+        f"maximum chunk size ({format_bytes(args.field_options.max_bytes_per_chunk)})",
+    )
+    for name, chunker, signal in data_chunks.items():
+        width = np.dtype(signal.dtype).itemsize
+        logger.info(
+            f"    {name: >10}: chunk shape {chunker.chunk_shape} and total count {chunker.chunk_count} and memory count {count_chunks_to_cover(memory_chunks.chunk_shape, chunker.chunk_shape)}.",
+        )
+        logger.info(
+            f"    {' ' * 10}: chunk size: {np.prod(chunker.chunk_shape)} items ({format_bytes(np.prod(chunker.chunk_shape) * width)}).",
+        )
+
+    if args.dry_run:
+        logger.info("Dry Run: exiting.")
+        return
+
+    logger.info(f"Writing results to {args.out_path}")
+
     nxs = NexusFile(args.out_path, mode="w")
     with nxs.as_context():
         add_items_to_group(args.data_source.instrument_metadata(), nxs.instrument)
         add_items_to_group(args.data_source.experiment_metadata(), nxs.experiment)
 
-        full_shape, is_dense, density = args.data_source.shape()
-
-        if any(s <= 0 for s in full_shape):
-            raise ValueError(
-                f"Invalid data shape {full_shape}. Each dimension must have at least 1 element."
-            )
-
-        memory_chunks, total_read_count, size_per_item, data_chunks, default_name = (
-            choose_memory_buffer_and_data_chunks(args, full_shape, density)
-        )
-
         provision_subentries(nxs, args, data_chunks, default_name)
 
-        axis_definitions, any_binned_axis = provision_data_axis(
+        axis_def_dict, any_binned_axis = provision_data_axis(
             nxs,
             args,
             full_shape,
             data_chunks,
+            axis_definitions,
         )
 
         accumulations, count_accumulations = provision_accumulation_subentries(
             nxs,
             args,
             full_shape,
-            axis_definitions,
+            axis_def_dict,
         )
-
-        binned_axis = [
-            ax for ax in axis_definitions.values() if ax.axis_type == AxisType.BINNED
-        ]
-
-        logger.info(f"Writing results to {args.out_path}")
-        logger.info(
-            f" Giving a final data shape of {full_shape} (Raw {format_bytes(np.prod(full_shape) * size_per_item)})",
-        )
-
-        logger.info(
-            f"Using a memory chunk shape {memory_chunks.chunk_shape} and count {memory_chunks.chunk_count}.",
-        )
-        logger.info(
-            f" Dense usage: {np.prod(memory_chunks.chunk_shape)} items ({format_bytes(np.prod(memory_chunks.chunk_shape) * size_per_item)}).",
-        )
-        if len(binned_axis) > 0:
-            logger.info(
-                f" Binned usage: {int(np.prod(memory_chunks.chunk_shape) * density)} items ({format_bytes(np.prod(memory_chunks.chunk_shape) * size_per_item * density)}), worst case density {density:.2f}.",
-            )
-        logger.info(f" Memory limit set at {format_bytes(args.memory_max_byte_count)}.")
-        logger.info("With data blocks:")
-        logger.info(
-            f"maximum chunk size ({format_bytes(args.field_options.max_bytes_per_chunk)})",
-        )
-        for name, chunker, signal in data_chunks.items():
-            width = np.dtype(signal.dtype).itemsize
-            logger.info(
-                f"    {name: >10}: chunk shape {chunker.chunk_shape} and total count {chunker.chunk_count} and memory count {count_chunks_to_cover(memory_chunks.chunk_shape, chunker.chunk_shape)}.",
-            )
-            logger.info(
-                f"    {' ' * 10}: chunk size: {np.prod(chunker.chunk_shape)} items ({format_bytes(np.prod(chunker.chunk_shape) * width)}).",
-            )
 
         with tqdm(
             desc="Overall reads", total=total_read_count, disable=not args.show_progress

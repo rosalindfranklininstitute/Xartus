@@ -20,8 +20,19 @@ def inspect() -> None:
         help="The maximum depth to print.",
         type=int,
     )
+    parser.add_argument(
+        "-i",
+        "--items",
+        default=True,
+        help="Whether to show the items in the tree.",
+        action=argparse.BooleanOptionalAction,
+    )
 
     args = parser.parse_args()
 
     with h5.File(args.filename, "r") as hdfinfile:
-        print_group(hdfinfile, max_depth=args.depth if args.depth is not None else -1)
+        print_group(
+            hdfinfile,
+            max_depth=args.depth if args.depth is not None else -1,
+            items=args.items,
+        )

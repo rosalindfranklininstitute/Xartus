@@ -39,13 +39,14 @@ class MultiLinspace:
                 (max_value - min_value) * self.area_positions / 100.0 + min_value,
             ],
         )
+        total_volume = np.sum(self.area_volumes)
         return np.concatenate(
             [
                 *[
                     np.linspace(
                         ends[ii],
                         ends[ii + 1],
-                        num=int(count * self.area_volumes[ii] / 100.0),
+                        num=int(count * self.area_volumes[ii] / total_volume),
                         endpoint=False,
                     )
                     for ii in range(len(self.area_positions))
