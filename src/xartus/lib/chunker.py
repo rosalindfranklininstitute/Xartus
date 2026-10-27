@@ -336,7 +336,7 @@ class Chunker:
         data_shape,
         chunk_shape,
         max_item_count,
-        priorities: list[Shape] | Shape | None = None,
+        priorities: Shape | list[Shape] | None = None,
     ) -> "Chunker":
         """
         Find the chunker that covers data_shape

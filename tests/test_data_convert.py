@@ -11,7 +11,8 @@ import numpy as np
 import h5py
 
 from xartus.api import data_convert
-from xartus.lib import Axis, AxisType, count_chunks_to_cover, check_nexus
+from xartus.lib import Axis, count_chunks_to_cover, check_nexus
+from xartus.lib.writers import Count
 
 from nexus_pixel_man_test_data import Man2DDataSource, ManData
 
@@ -140,43 +141,21 @@ def check_basic_axis_correct(
 
 
 def check_dense_correct(fle, man_data_source: Man2DDataSource):
-    for data_name in ["images", "spectra"]:
-        assert (
-            fle[f"/entry/data/{data_name}/signal"].shape
-            == man_data_source.man_data.shape
-        )
-
-        np.testing.assert_allclose(
-            fle[f"/entry/data/{data_name}/signal"][:, :, :],
-            man_data_source.man_data.dense,
-        )
-
+    check_binned_correct(fle, man_data_source, 1, False, False)
     total_image = np.sum(man_data_source.man_data.dense, axis=2)
     assert fle["/entry/accumulations/total_image/signal"].shape == (
         2,
         *total_image.shape,
-    )
-    np.testing.assert_allclose(
-        fle["/entry/accumulations/total_image/signal"][0, :, :], total_image
-    )
-
-    total_spectra = np.sum(man_data_source.man_data.dense, axis=(0, 1))
-    assert fle["/entry/accumulations/total_spectra/signal"].shape == (
-        2,
-        *total_spectra.shape,
-    )
-    np.testing.assert_allclose(
-        fle["/entry/accumulations/total_spectra/signal"][0, :], total_spectra
     )
 
 
 def check_binned_correct(
     fle,
     man_data_source: Man2DDataSource,
-    max_count_per_bin,
+    max_mz_count_per_bin,
     should_be_sparse,
+    has_counts,
 ):
-    any_binned = False
     has_some_sparsity = False
     for data_name in ["images", "spectra"]:
         name = f"/entry/data/{data_name}/signal"
@@ -192,7 +171,7 @@ def check_binned_correct(
                     data_part[
                         :,
                         :,
-                        (60 // max_count_per_bin) * ii : (60 // max_count_per_bin)
+                        (60 // max_mz_count_per_bin) * ii : (60 // max_mz_count_per_bin)
                         * (ii + 1),
                     ],
                     axis=2,
@@ -203,36 +182,20 @@ def check_binned_correct(
                 ),
             )
 
-        for axis in man_data_source.axes.values():
-            if axis.axis_type == AxisType.BINNED:
-                any_binned = True
-                assert (
-                    fle[f"/entry/data/{data_name}/{axis.name}_exact"].dtype
-                    == axis.dtype
-                )
-                assert all(
-                    fle[f"/entry/data/{data_name}"].attrs[f"{axis.name}_exact_indices"]
-                    == list(range(3))
-                )
-                exact = fle[f"/entry/data/{data_name}/{axis.name}_exact"][:, :, :]
-                desired = np.tile(
-                    fle[f"/entry/data/{data_name}/{axis.name}"],
-                    (8, 8, 1),
-                )
-                if np.issubdtype(axis.dtype, np.integer):
-                    mask = exact == 0
-                    desired[mask] = 0
-                else:
-                    mask = np.isnan(exact)
-                    desired[mask] = np.nan
-
-                np.testing.assert_allclose(exact, desired)
+    total_image = np.sum(man_data_source.man_data.dense, axis=2)
+    assert fle["/entry/accumulations/total_image/signal"].shape == (
+        2,
+        *total_image.shape,
+    )
+    np.testing.assert_allclose(
+        fle["/entry/accumulations/total_image/signal"][0, :, :], total_image
+    )
 
     total_spectra = fle["/entry/accumulations/total_spectra/signal"]
     for ii in range(4):
         file_slice = total_spectra[
             :,
-            (60 // max_count_per_bin) * ii : (60 // max_count_per_bin) * (ii + 1),
+            (60 // max_mz_count_per_bin) * ii : (60 // max_mz_count_per_bin) * (ii + 1),
         ]
         data_slice = man_data_source.man_data.dense[:, :, 60 * ii : 60 * (ii + 1)]
         np.testing.assert_allclose(
@@ -247,21 +210,14 @@ def check_binned_correct(
     if should_be_sparse:
         assert has_some_sparsity
 
-    if any_binned:
-        assert "/entry/data/item_counts/items_per_bin" in fle
-        assert np.all(
-            fle["/entry/data/item_counts/items_per_bin"][...] <= max_count_per_bin
-        )
-        assert (
-            np.max(fle["/entry/data/item_counts/items_per_bin"][...])
-            == max_count_per_bin
-        )
+    if has_counts:
+        assert "/entry/qa/item_counts/counts" in fle
+        assert np.all(fle["/entry/qa/item_counts/counts"][...] <= max_mz_count_per_bin)
+        assert np.max(fle["/entry/qa/item_counts/counts"][...]) == max_mz_count_per_bin
         for axis in man_data_source.axes.values():
-            assert f"/entry/data/item_counts/{axis.name}" in fle
-            assert f"/entry/data/item_counts/{axis.name}_exact" not in fle
-
-    assert "/entry/accumulations/item_counts_total_spectra" in fle
-    assert "/entry/accumulations/item_counts_total_image" not in fle
+            assert f"/entry/qa/item_counts/{axis.name}" in fle
+    else:
+        assert "/entry/qa/item_counts/" not in fle
 
 
 dense_single_axis_params = Parameters(chunks=True)
@@ -294,8 +250,8 @@ def test_dense_multi_axis_single_chunk(nx_file, man_data):
     man_data_source = Man2DDataSource(
         man_data,
         supplementary_axes=[
-            Axis("time", 0, AxisType.EXACT, np.int16, "s"),
-            Axis("error", 2, AxisType.EXACT, np.int16, ""),
+            Axis("time", 0, np.int16, "s"),
+            Axis("error", 2, np.int16, ""),
         ],
     )
 
@@ -320,12 +276,13 @@ def test_all_dimensions_binned(nx_file, man_data):
     man_data_source = Man2DDataSource(
         man_data,
         supplementary_axes=[
-            Axis("x", 0, AxisType.BINNED, np.float32, "m"),
-            Axis("y", 1, AxisType.BINNED, np.float32, "m"),
-            Axis("mz", 2, AxisType.BINNED, np.float32, "m"),
+            Axis("x", 0, np.float32, "m"),
+            Axis("y", 1, np.float32, "m"),
+            Axis("mz", 2, np.float32, "m"),
         ],
         binning={"x": 2, "y": 2, "mz": 2},
         multipliers={"x": 0.1, "y": 0.2, "mz": 0.3},
+        extra_accumulations=[Count("item_counts")],
     )
 
     process_args = data_convert.ProcessArgs(
@@ -345,20 +302,11 @@ def test_all_dimensions_binned(nx_file, man_data):
         for data_name in ["images", "spectra"]:
             name = f"/entry/data/{data_name}/signal"
             assert name in fle
-            for axis in man_data_source.axes.values():
-                assert (
-                    fle[f"/entry/data/{data_name}/{axis.name}_exact"].dtype
-                    == axis.dtype
-                )
-                assert all(
-                    fle[f"/entry/data/{data_name}"].attrs[f"{axis.name}_exact_indices"]
-                    == list(range(3))
-                )
-                data_part = fle[f"/entry/data/{data_name}/signal"]
-                assert np.sum(data_part) == np.sum(man_data_source.man_data.dense)
+            data_part = fle[f"/entry/data/{data_name}/signal"]
+            assert np.sum(data_part) == np.sum(man_data_source.man_data.dense)
 
-        assert np.all(fle["/entry/data/item_counts/items_per_bin"][...] <= 8)
-        assert np.max(fle["/entry/data/item_counts/items_per_bin"][...]) == 8
+        assert np.all(fle["/entry/qa/item_counts/counts"][...] <= 8)
+        assert np.max(fle["/entry/qa/item_counts/counts"][...]) == 8
 
 
 def test_sparse_all_exact(nx_file, man_data):
@@ -393,7 +341,7 @@ binned_params = Parameters(chunks=True, memory=True, bins=True, dtypes=True, mul
 
 
 @pytest.mark.parametrize(binned_params.args(), binned_params.params())
-def test_binned(
+def test_mz_binned(
     nx_file,
     man_data,
     chunk_max_byte_count,
@@ -404,9 +352,10 @@ def test_binned(
 ):
     man_data_source = Man2DDataSource(
         man_data,
-        supplementary_axes=[Axis("mz", 2, AxisType.BINNED, mz_dtype, "mz")],
+        supplementary_axes=[Axis("mz", 2, mz_dtype, "mz")],
         binning={"mz": mz_binning},
         multipliers={"mz": mult},
+        extra_accumulations=[Count("item_counts")],
     )
 
     process_args = data_convert.ProcessArgs(
@@ -428,41 +377,9 @@ def test_binned(
         check_binned_correct(
             fle,
             man_data_source,
-            max_count_per_bin=mz_binning,
+            max_mz_count_per_bin=mz_binning,
             should_be_sparse=chunk_max_byte_count == 240 * 2,
-        )
-
-
-def test_binned_multi_continuous_axis_single_chunk(nx_file, man_data):
-    man_data_source = Man2DDataSource(
-        man_data,
-        supplementary_axes=[
-            Axis("mz", 2, AxisType.BINNED, np.int16, "s"),
-            Axis("time", 0, AxisType.EXACT, np.int16, "s"),
-        ],
-    )
-
-    process_args = data_convert.ProcessArgs(
-        out_path=nx_file,
-        chunk_max_byte_count=1024 * 1024,
-        memory_max_byte_count=1024 * 1024 * 1024,
-        data_source=man_data_source,
-    )
-    data_convert.process(process_args, {})
-
-    assert nx_file.exists()
-
-    with h5py.File(nx_file, "r") as fle:
-        check_basic_axis_correct(
-            fle,
-            man_data_source,
-            process_args.chunk_max_byte_count / 2,
-        )
-        check_binned_correct(
-            fle,
-            man_data_source,
-            max_count_per_bin=1,
-            should_be_sparse=False,
+            has_counts=True,
         )
 
 
@@ -472,17 +389,18 @@ binned_multi_axis_params = Parameters(chunks=True, bins=True, dtypes=True, mult=
 @pytest.mark.parametrize(
     binned_multi_axis_params.args(), binned_multi_axis_params.params()
 )
-def test_binned_multi_axis(
+def test_multi_binned(
     nx_file, man_data, chunk_max_byte_count, mz_binning, mz_dtype, mult
 ):
     man_data_source = Man2DDataSource(
         man_data,
         supplementary_axes=[
-            Axis("mz", 2, AxisType.BINNED, mz_dtype, "mz"),
-            Axis("error", 2, AxisType.BINNED, np.float32, "%"),
+            Axis("mz", 2, mz_dtype, "mz"),
+            Axis("error", 2, np.float32, "%"),
         ],
         binning={"mz": mz_binning, "error": mz_binning},
         multipliers={"mz": mult, "error": mult / 2},
+        extra_accumulations=[Count("item_counts")],
     )
 
     process_args = data_convert.ProcessArgs(
@@ -504,6 +422,7 @@ def test_binned_multi_axis(
         check_binned_correct(
             fle,
             man_data_source,
-            max_count_per_bin=mz_binning,
+            max_mz_count_per_bin=mz_binning,
             should_be_sparse=chunk_max_byte_count == 240 * 2,
+            has_counts=True,
         )

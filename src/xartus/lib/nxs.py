@@ -183,6 +183,7 @@ class NexusFile:
 
             create_nxgroup(self.entry, "instrument", nx_class="NXinstrument")
             create_nxgroup(self.entry, "experiment", nx_class="NXparameters")
+            create_nxgroup(self.entry, "user", nx_class="NXuser")
 
         else:
             self.entry = self._file["entry"]
@@ -219,4 +220,18 @@ class NexusFile:
         _set_experiment,
         None,
         "The experiment group",
+    )
+
+    def _get_user(self) -> h5py.Group:
+        return self.entry["user"]
+
+    def _set_user(self, value: h5py.Group) -> None:
+        assert isinstance(value, h5py.Group)
+        self.entry["user"] = value
+
+    user = property(
+        _get_user,
+        _set_user,
+        None,
+        "The user group",
     )

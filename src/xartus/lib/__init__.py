@@ -14,7 +14,6 @@ from .multi_coo import MultiCOO
 from .multi_linspace import MultiLinspace
 from .data_source import (
     Signal,
-    AxisType,
     Axis,
     UnknownAxisError,
     AbstractDataSource,

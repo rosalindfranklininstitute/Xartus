@@ -3,55 +3,16 @@
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 
 from contextlib import AbstractContextManager
-from typing import Any, Callable, NamedTuple
+from typing import Any, Callable
 from abc import abstractmethod
-from dataclasses import dataclass
-from enum import Enum
 
 import numpy as np
-import numpy.typing as npt
 
+from xartus.lib.bounds import Chunk, Shape
+from xartus.lib.multi_coo import MultiCOO
+from xartus.lib.writers import AbstractWriter
 
-from .bounds import Chunk, Shape
-from .multi_coo import MultiCOO
-
-
-@dataclass
-class Signal:
-    name: str
-    dtype: npt.DTypeLike
-    units: str | None = None
-
-
-class AxisType(Enum):
-    EXACT = 1
-    BINNED = 2
-
-
-@dataclass
-class Axis:
-    name: str
-    primary_axis: int
-    axis_type: AxisType
-    dtype: npt.DTypeLike
-    units: str | None = None
-
-
-class UnknownAxisError(Exception):
-    def __init__(self, name: str, density: AxisType | None = None):
-        match density:
-            case None:
-                super().__init__(f"Unknown axis: {name}")
-            case AxisType.EXACT:
-                super().__init__(f"Unknown exact axis: {name}")
-            case AxisType.BINNED:
-                super().__init__(f"Unknown binned axis: {name}")
-
-
-class DataShape(NamedTuple):
-    shape: Shape
-    is_sparse: bool
-    worst_case_density: float
+from .definitions import DataShape, Signal, Axis
 
 
 class AbstractDataSource(AbstractContextManager):
@@ -78,12 +39,24 @@ class AbstractDataSource(AbstractContextManager):
     def instrument_metadata(self) -> dict[str, Any]:
         """
         Returns a dictionary of values that will be stored as the instrument metadata.
+        This writes attributes to a NeXus NXinstrument.
+        Any properties are accepted, but using NXinstrument properties improves self describing.
+        """
+
+    @abstractmethod
+    def user_metadata(self) -> dict[str, Any]:
+        """
+        Returns a dictionary of values that will be stored as the user metadata.
+        This writes fields to a NeXus NXuser.
+        Any properties are accepted, but using NXuser properties improves self describing.
         """
 
     @abstractmethod
     def experiment_metadata(self) -> dict[str, Any]:
         """
         Returns a dictionary of values that will be stored as the experiment metadata.
+        This writes attributes to a NeXus NXparameters.
+        Any properties are accepted, but using NXparameters properties improves self describing.
         """
 
     @abstractmethod
@@ -95,11 +68,11 @@ class AbstractDataSource(AbstractContextManager):
     @abstractmethod
     def signal_definition(self) -> Signal:
         """
-        Returns the type for data.
+        Returns the name, data type, and (optionally) unit for the data.
         """
 
     @abstractmethod
-    def output_chunks(self) -> dict[str, Shape]:
+    def output_chunk_priorities(self) -> dict[str, Shape]:
         """
         Returns the names and chunking priorities of the desired output array.
         For example simple image data (x,y, spectra) with shape (32,32,184000)
@@ -108,7 +81,7 @@ class AbstractDataSource(AbstractContextManager):
         'spectra':  (2,2,1) -> (1,1,184000)
         """
 
-    def read_chunks(self) -> list[Shape] | None:
+    def read_chunks(self) -> Shape | list[Shape] | None:
         """
         Returns a list of chunking priorities that can be used for reading the raw data.
         This is used in conjunction with chunk_read_count to select the most efficient reading scheme, and to track progress.
@@ -128,43 +101,27 @@ class AbstractDataSource(AbstractContextManager):
     def axis_definitions(self) -> list[Axis]:
         """
         Returns the axis that should be used when storing the data.
-        For example simple image data (x,y, spectra):
-
-        axis(0) : Axis('x', 0, EXACT, 'um')
-
-        axis(1) : Axis('y', 1, EXACT, 'um')
-
-        If is it exact:
-
-        axis(2) : Axis('mz', 2, EXACT, 'mz')
-
-        if it is only peaks:
-
-        axis(2) : Axis('mz', 2, BINNED, 'mz')
+        Each axis has a name, a data type, the dimension it applies to, and (optionally) the unit.
+        Every dimension must have an axis.
+        Multiple dimensions can be defined for a single dimension. The first in the list for each dimesnsion will be used as the default.
         """
 
     @abstractmethod
-    def exact_axis_values(self, axis: Axis) -> np.ndarray:
+    def axis_values(self, axis: Axis) -> np.ndarray:
         """
-        Returns the values for the specified exact axis.
-        """
-
-    @abstractmethod
-    def binned_axis_edges(self, axis: Axis) -> np.ndarray:
-        """
-        Returns the bin edges used to histogram the given binned axis.
-        This is used for generating the output accumulations across this axis, if required.
+        Returns the values for the specified axis.
         """
 
     @abstractmethod
-    def output_accumulations(self) -> dict[str, tuple[str, ...]]:
+    def output_accumulations(self) -> list[AbstractWriter]:
         """
-        Returns the names and lists of axis that should be
-        accumulated (summed and max).
-        For example simple image data (x,y, spectra):
-        might produce:
-        'total_images':     ('mz') # Accumulate over the spectra
-        'total_spectra':    ('x','y') # Accumulate over the images
+        Returns a list of the extra data you want in the file.
+        These are implementations of Abstract writers.
+        For example, with simple image data (x,y, spectra):
+        return [
+            SumAndMax('total_images', axes= ['mz']), # Accumulate over the spectra
+            SumAndMax('total_spectra', axes=['x','y']) # Accumulate over the images
+        ]
         """
 
     @abstractmethod

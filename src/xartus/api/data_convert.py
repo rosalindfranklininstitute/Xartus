@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 import argparse
-from typing import Any, Iterable, Generator, cast
+from typing import Any, Iterable, Generator, cast, Callable
 from threading import Lock, local
 import concurrent.futures as cfutures
 from dataclasses import dataclass, field
@@ -26,7 +26,6 @@ from argsui import (
 )
 from ..lib.data_source import (
     AbstractDataSource,
-    AxisType,
     Axis,
     Signal,
 )
@@ -46,6 +45,7 @@ from ..lib.nxs import (
 )
 from ..lib.utils import format_bytes
 from ..lib.dtypes import Intp1D, Bool1D
+from ..lib.writers.hdf5_signal import HDF5ChunkedSignalWriter
 
 logger = logging.getLogger(__name__)
 
@@ -175,12 +175,45 @@ def choose_memory_buffer(
     return memory_chunks[min_read_name], min_read_count, min_read_name
 
 
+def choose_memory_buffer_2(
+    read_priorities: Shape | list[Shape] | None,
+    max_item_count: int,
+    density: float,
+    data_chunks: list[Chunker],
+    chunk_read_count: Callable[[Shape], int],
+) -> tuple[Chunker, int, int]:
+    memory_chunks = [
+        Chunker.find_chunk_multiple(
+            chunker.data_shape,
+            chunker.chunk_shape,
+            max_item_count / density,
+            priorities=read_priorities,
+        )
+        for chunker in data_chunks
+    ]
+
+    min_read_count = np.pow(2, 32, dtype=np.int64)
+    min_read_inx = -1
+    for inx, chunker in enumerate(memory_chunks):
+        read_count = 0
+        for chunk in chunker.chunks():
+            read_count += chunk_read_count(chunk.shape)
+        if (
+            read_count == min_read_count and inx < min_read_inx
+        ) or read_count < min_read_count:
+            min_read_count = read_count
+            min_read_inx = inx
+    assert min_read_inx >= 0
+
+    return memory_chunks[min_read_inx], min_read_count, min_read_inx
+
+
 def choose_memory_buffer_and_data_chunks(
     args: ProcessArgs,
     full_shape: Shape,
     density: float,
 ) -> tuple[Chunker, int, int, DataChunks, str]:
-    data_priorities = args.data_source.output_chunks()
+    data_priorities = args.data_source.output_chunk_priorities()
     if len(data_priorities) == 0:
         raise ValueError("At least one dataset must be provided.")
     for name, priorities in data_priorities.items():
@@ -213,30 +246,7 @@ def choose_memory_buffer_and_data_chunks(
             signal_definition,
         )
 
-    axis_definitions = args.data_source.axis_definitions()
-    if any(ax.axis_type == AxisType.BINNED for ax in axis_definitions):
-        counts_item_width = np.dtype(np.uint16).itemsize
-        data_max_items[_count_subentry_name()] = int(
-            args.field_options.max_bytes_per_chunk / counts_item_width,
-        )
-        chunker = Chunker.from_max_item_count(
-            data_shape=full_shape,
-            priorities=tuple(1 for _ in full_shape),
-            items_per_chunk=data_max_items[_count_subentry_name()],
-        )
-        chunker.normalise()
-        data_chunks[_count_subentry_name()] = (
-            chunker,
-            Signal("items_per_bin", np.uint16, "items"),
-        )
-
-    size_per_item = signal_item_width + np.sum(
-        [
-            np.dtype(ax.dtype).itemsize
-            for ax in axis_definitions
-            if ax.axis_type == AxisType.BINNED
-        ],
-    )
+    size_per_item = signal_item_width
     memory_max_item_count = int(args.memory_max_byte_count / size_per_item)
     memory_chunks, total_read_count, min_read_name = choose_memory_buffer(
         args,
@@ -295,70 +305,62 @@ def provision_data_axis(
 ) -> tuple[dict[str, Axis], bool]:
 
     any_binned_axis = False
-    for entry_name, chunker, _ in data_chunks.items():
+    for entry_name, _, _ in data_chunks.items():
         group_axes = NxAxes()
         for _ in full_shape:
             group_axes.append([])
         for axis in axis_definitions:
-            match axis.axis_type:
-                case AxisType.EXACT:
-                    values = args.data_source.exact_axis_values(axis)
-                    if len(values) != full_shape[axis.primary_axis]:
-                        raise InvalidAxisError(
-                            f"Expected {full_shape[axis.primary_axis]} values for {axis.name} but received {len(values)}.",
-                        )
-                    if values.dtype != axis.dtype:
-                        raise TypeError(
-                            f"Expected {axis.dtype} values for {axis.name} but found {values.dtype}"
-                        )
+            values = args.data_source.exact_axis_values(axis)
+            if len(values) != full_shape[axis.primary_axis]:
+                raise InvalidAxisError(
+                    f"Expected {full_shape[axis.primary_axis]} values for {axis.name} but received {len(values)}.",
+                )
+            if values.dtype != axis.dtype:
+                raise TypeError(
+                    f"Expected {axis.dtype} values for {axis.name} but found {values.dtype}"
+                )
 
-                    nx_axis = NxAxis(
-                        values=values,
-                        name=axis.name,
-                        indices=[axis.primary_axis],
-                        units=axis.units,
-                    )
-                    group_axes[axis.primary_axis].append(nx_axis)
-                case AxisType.BINNED:
-                    any_binned_axis = True
-                    values = args.data_source.binned_axis_edges(axis)[1:]
-                    if len(values) != full_shape[axis.primary_axis]:
-                        raise InvalidAxisError(
-                            f"Expected {full_shape[axis.primary_axis] + 1} edges for {axis.name} but received {len(values) + 1}.",
-                        )
-                    if values.dtype != axis.dtype:
-                        raise TypeError(
-                            f"Expected {axis.dtype} values for {axis.name} but found {values.dtype}"
-                        )
-
-                    nx_axis = NxAxis(
-                        name=axis.name,
-                        indices=[axis.primary_axis],
-                        units=axis.units,
-                        values=values,
-                    )
-                    if entry_name != _count_subentry_name():
-                        nx_axis_exact = NxAxis(
-                            name=f"{axis.name}_exact",
-                            indices=list(range(len(chunker.data_shape))),
-                            units=axis.units,
-                            shape=chunker.data_shape,
-                            compression=args.field_options.compression,
-                            compression_opts=args.field_options.compression_opts,
-                            chunk_shape=chunker.chunk_shape,
-                            dtype=axis.dtype,
-                            fillvalue=0
-                            if np.issubdtype(axis.dtype, np.integer)
-                            else np.nan,
-                        )
-                        group_axes[axis.primary_axis].extend([nx_axis, nx_axis_exact])
-                    else:
-                        group_axes[axis.primary_axis].append(nx_axis)
-                case _:
-                    raise InvalidAxisError(f"Unknown Axis type: {axis.axis_type}")
+            nx_axis = NxAxis(
+                values=values,
+                name=axis.name,
+                indices=[axis.primary_axis],
+                units=axis.units,
+            )
+            group_axes[axis.primary_axis].append(nx_axis)
         group_axes.add_to_group(nxs.entry["data"][entry_name])
 
     return {ax.name: ax for ax in axis_definitions}, any_binned_axis
+
+
+def fill_axes(
+    data_source: AbstractDataSource,
+    axis_definitions: list[Axis],
+    full_shape: Shape,
+) -> NxAxes:
+
+    group_axes = NxAxes()
+    for _ in full_shape:
+        group_axes.append([])
+    for axis in axis_definitions:
+        values = data_source.axis_values(axis)
+        if len(values) != full_shape[axis.primary_axis]:
+            raise InvalidAxisError(
+                f"Expected {full_shape[axis.primary_axis]} values for {axis.name} but received {len(values)}.",
+            )
+        if values.dtype != axis.dtype:
+            raise TypeError(
+                f"Expected {axis.dtype} values for {axis.name} but found {values.dtype}"
+            )
+
+        nx_axis = NxAxis(
+            values=values,
+            name=axis.name,
+            indices=[axis.primary_axis],
+            units=axis.units,
+        )
+        group_axes[axis.primary_axis].append(nx_axis)
+
+    return group_axes
 
 
 @dataclass
@@ -452,16 +454,8 @@ def provision_accumulation_subentries(
 
         for ax in axis_definitions.values():
             if not axis_to_accumulate[ax.primary_axis]:
-                match ax.axis_type:
-                    case AxisType.EXACT:
-                        values = args.data_source.exact_axis_values(ax)
-                        edges.append(None)
-                    case AxisType.BINNED:
-                        values = args.data_source.binned_axis_edges(ax)[1:]
-                        edges.append(values)
-                        has_binned_axis = True
-                    case _:
-                        raise InvalidAxisError(f"Unknown Axis type: {ax.axis_type}")
+                values = args.data_source.axis_values(ax)
+                edges.append(None)
                 count = len(values)
                 new_index = ax.primary_axis - np.sum(
                     axis_to_accumulate[0 : ax.primary_axis],
@@ -628,6 +622,40 @@ def write_data(
     return signal_data, count_data
 
 
+def prepare_data(
+    full_shape: Shape,
+    chunk_data: np.ndarray | MultiCOO,
+) -> np.ndarray | MultiCOO:
+    if isinstance(chunk_data, np.ndarray):
+        return chunk_data
+
+    if chunk_data.coords.shape[1] == 0:
+        return MultiCOO(
+            coords=np.array([], dtype=np.int32),
+            values={"signal": np.array([]), "counts": np.array([])},
+        )
+
+    chunk_data.sort(full_shape)
+    counts = chunk_data.acc_duplicates(
+        full_shape,
+        count=True,
+        accumulators={"signal": np.add},
+        default_accumulator=np.maximum,
+    )
+    assert counts is not None
+
+    for name, value in chunk_data.values.items():
+        if value.shape != counts.shape:
+            raise ValueError(
+                f"Expected all signals to have shape {counts.shape} but '{name}' has shape {value.shape}"
+            )
+
+    return MultiCOO(
+        coords=chunk_data.coords,
+        values={"signal": chunk_data["signal"], "counts": counts},
+    )
+
+
 def accumulate_data(
     accumulations: dict[str, Accumulation],
     count_accumulations: dict[str, Accumulation],
@@ -651,17 +679,20 @@ def accumulate_data(
                 progress.update()
 
 
-def add_items_to_group(items: dict[str, Any], root) -> None:
+def add_items_to_group(items: dict[str, Any], root, as_attributes=True) -> None:
     for key, value in items.items():
         if isinstance(value, dict):
             if key not in root:
                 create_nxgroup(root, key)
             add_items_to_group(value, root[key])
         else:
-            root.attrs[key] = value
+            if as_attributes:
+                root.attrs[key] = value
+            else:
+                root.create_dataset(key, data=value)
 
 
-def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
+def process_old(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
 
     if args.field_options.max_bytes_per_chunk <= 0:
         args.field_options = FieldOptions(
@@ -673,7 +704,7 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
     else:
         assert args.field_options.max_bytes_per_chunk == args.chunk_max_byte_count
 
-    full_shape, _, density = args.data_source.shape()
+    full_shape, density = args.data_source.shape()
 
     if any(s <= 0 for s in full_shape):
         raise ValueError(
@@ -684,7 +715,7 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
         choose_memory_buffer_and_data_chunks(args, full_shape, density)
     )
     axis_definitions = args.data_source.axis_definitions()
-    binned_axis = [ax for ax in axis_definitions if ax.axis_type == AxisType.BINNED]
+    binned_axis = []
 
     logger.info(
         f" Giving a final data shape of {full_shape} (Raw {format_bytes(np.prod(full_shape) * size_per_item)})",
@@ -724,6 +755,9 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
     with nxs.as_context():
         add_items_to_group(args.data_source.instrument_metadata(), nxs.instrument)
         add_items_to_group(args.data_source.experiment_metadata(), nxs.experiment)
+        add_items_to_group(
+            args.data_source.user_metadata(), nxs.user, as_attributes=False
+        )
 
         provision_subentries(nxs, args, data_chunks, default_name)
 
@@ -811,3 +845,179 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
                 signal_name = acc_group.attrs["signal"]
                 acc_group[signal_name][0, *extra_slices] = accumulation.sum_data
                 acc_group[signal_name][1, *extra_slices] = accumulation.max_data
+
+
+def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
+
+    if args.field_options.max_bytes_per_chunk <= 0:
+        args.field_options = FieldOptions(
+            compression=args.field_options.compression,
+            compression_opts=args.field_options.compression_opts,
+            max_bytes_per_chunk=args.chunk_max_byte_count,
+            shuffle=args.field_options.shuffle,
+        )
+    else:
+        assert args.field_options.max_bytes_per_chunk == args.chunk_max_byte_count
+
+    full_shape, density = args.data_source.shape()
+
+    if any(s <= 0 for s in full_shape):
+        raise ValueError(
+            f"Invalid data shape {full_shape}. Each dimension must have at least 1 element."
+        )
+
+    signal_definition = args.data_source.signal_definition()
+    signal_writers: list[HDF5ChunkedSignalWriter] = [
+        HDF5ChunkedSignalWriter(
+            signal_definition.name, name, priorities, signal_definition.units
+        )
+        for name, priorities in args.data_source.output_chunk_priorities().items()
+    ]
+    signal_writers.sort(key=lambda w: w.chunking_name)
+
+    extra_writers = args.data_source.output_accumulations()
+
+    size_per_signal_item = np.dtype(signal_definition.dtype).itemsize
+
+    axis_definitions = args.data_source.axis_definitions()
+    signal_chunkers: list[Chunker] = [
+        writer.init_chunker(
+            full_shape,
+            signal_definition.dtype,
+            args.field_options.max_bytes_per_chunk,
+            axis_definitions,
+        )
+        for writer in signal_writers
+    ]
+    memory_max_item_count = int(args.memory_max_byte_count / size_per_signal_item)
+
+    memory_chunker, total_read_count, default_inx = choose_memory_buffer_2(
+        args.data_source.read_chunks(),
+        memory_max_item_count,
+        density,
+        signal_chunkers,
+        args.data_source.chunk_read_count,
+    )
+    signal_writers.insert(0, signal_writers.pop(default_inx))
+    signal_chunkers.insert(0, signal_chunkers.pop(default_inx))
+
+    logger.info(
+        f" Giving a final data shape of {full_shape} (Raw {format_bytes(np.prod(full_shape) * size_per_signal_item)})",
+    )
+
+    logger.info(
+        f"Using a memory chunk shape {memory_chunker.chunk_shape} and count {memory_chunker.chunk_count}.",
+    )
+    logger.info(
+        f" Dense usage: {np.prod(memory_chunker.chunk_shape)} items ({format_bytes(np.prod(memory_chunker.chunk_shape) * size_per_signal_item)}).",
+    )
+    logger.info(
+        f" Sparse usage: {int(np.prod(memory_chunker.chunk_shape) * density)} items ({format_bytes(np.prod(memory_chunker.chunk_shape) * size_per_signal_item * density)}), worst case density {density:.2f}.",
+    )
+    logger.info(f" Memory limit set at {format_bytes(args.memory_max_byte_count)}.")
+    logger.info("With data blocks:")
+    logger.info(
+        f"maximum chunk size ({format_bytes(args.field_options.max_bytes_per_chunk)})",
+    )
+    logger.info("Signal data:")
+    for writer, chunker in zip(signal_writers, signal_chunkers, strict=True):
+        logger.info(
+            f"    {writer.chunking_name: >10}: chunk shape {chunker.chunk_shape} and total count {chunker.chunk_count} and memory count {count_chunks_to_cover(memory_chunker.chunk_shape, chunker.chunk_shape)}.",
+        )
+        logger.info(
+            f"    {' ' * 10}: chunk size: {np.prod(chunker.chunk_shape)} items ({format_bytes(np.prod(chunker.chunk_shape) * size_per_signal_item)}).",
+        )
+
+    logger.info("Additional data:")
+    for writer in extra_writers:
+        chunker = writer.init_chunker(
+            full_shape,
+            signal_definition.dtype,
+            args.field_options.max_bytes_per_chunk,
+            axis_definitions,
+        )
+        logger.info(
+            f"    {writer.name: >10}: chunk shape {chunker.chunk_shape} and total count {chunker.chunk_count} and memory count {count_chunks_to_cover(memory_chunker.chunk_shape, chunker.chunk_shape)}.",
+        )
+        logger.info(
+            f"    {' ' * 10}: chunk size: {np.prod(chunker.chunk_shape)} items ({format_bytes(np.prod(chunker.chunk_shape) * size_per_signal_item)}).",
+        )
+
+    if args.dry_run:
+        logger.info("Dry Run: exiting.")
+        return
+
+    logger.info(f"Writing results to {args.out_path}")
+
+    nxs = NexusFile(args.out_path, mode="w")
+    with nxs.as_context():
+        add_items_to_group(args.data_source.instrument_metadata(), nxs.instrument)
+        add_items_to_group(args.data_source.experiment_metadata(), nxs.experiment)
+        add_items_to_group(
+            args.data_source.user_metadata(), nxs.user, as_attributes=False
+        )
+
+        axes = fill_axes(args.data_source, axis_definitions, full_shape)
+
+        nxs.entry.attrs["default"] = "data"
+
+        all_writers = [*signal_writers, *extra_writers]
+        for writer in all_writers:
+            writer.init_field(
+                nxs, full_shape, axes, signal_definition.dtype, args.field_options
+            )
+
+        with tqdm(
+            desc="Overall reads", total=total_read_count, disable=not args.show_progress
+        ) as overall_reads_timer:
+            data_source_lock = Lock()
+            accumulation_lock = Lock()
+
+            def process_chunk(memory_chunk: Chunk) -> None:
+                local_store = local()
+                with data_source_lock:
+                    local_store.chunk_data = prepare_data(
+                        full_shape,
+                        args.data_source.fill_chunk(
+                            memory_chunk,
+                            overall_reads_timer.update,
+                        ),
+                    )
+
+                with accumulation_lock:
+                    for writer in tqdm(
+                        all_writers,
+                        desc="Parsing data",
+                        disable=not args.show_progress,
+                    ):
+                        writer.parse_data(
+                            memory_chunk,
+                            local_store.chunk_data,
+                        )
+
+            outer_chunks = list(memory_chunker.chunks())
+            with cfutures.ThreadPoolExecutor(max_workers=2) as executor:
+                futures = [
+                    executor.submit(process_chunk, memory_chunk)
+                    for memory_chunk in outer_chunks
+                ]
+
+                for memory_chunk in tqdm(
+                    cfutures.as_completed(futures),
+                    total=len(outer_chunks),
+                    desc="Memory chunks",
+                    leave=True,
+                    disable=not args.show_progress,
+                ):
+                    try:
+                        memory_chunk.result()
+                    except:
+                        for f in futures:
+                            f.cancel()
+                        raise
+            for writer in tqdm(
+                all_writers,
+                desc="Finalising data",
+                disable=not args.show_progress,
+            ):
+                writer.finalise()
