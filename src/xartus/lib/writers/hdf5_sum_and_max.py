@@ -1,9 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Duncan McDougall <duncan.mcdougall@rfi.ac.uk>
 #
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
-from xartus.lib.exceptions import InvalidAxisError
-from xartus.lib.dtypes import Bool1D, Intp1D
-from xartus.lib.chunker import Chunker
 from typing import override, Any, cast
 import numpy.typing as npt
 import numpy as np
@@ -21,7 +18,10 @@ from xartus.lib.nxs import (
     NxAxis,
 )
 from xartus.lib.multi_coo import MultiCOO
-from xartus.lib.data_source import Axis
+from xartus.lib.data_source import Axis, UnknownAxisError
+from xartus.lib.exceptions import InvalidAxisError
+from xartus.lib.dtypes import Bool1D, Intp1D
+from xartus.lib.chunker import Chunker
 
 
 class SumAndMax(AbstractWriter):
@@ -62,9 +62,14 @@ class SumAndMax(AbstractWriter):
                 ),
             ],
         )
+        used_axes = dict.fromkeys(self.axes, False)
         for ax in axes:
             if ax.name in self.axes:
                 axis_to_accumulate[ax.primary_axis] = True
+                used_axes[ax.name] = True
+        for ax, used in used_axes.items():
+            if not used:
+                raise UnknownAxisError(ax)
 
         final_dim = np.sum(axis_to_accumulate == False)  # noqa: E712
         acc_shape: Intp1D = np.zeros((final_dim,), dtype=np.intp)

@@ -11,8 +11,8 @@ import numpy as np
 import h5py
 
 from xartus.api import data_convert
-from xartus.lib import Axis, count_chunks_to_cover, check_nexus
-from xartus.lib.writers import Count
+from xartus.lib import Axis, count_chunks_to_cover, check_nexus, UnknownAxisError
+from xartus.lib.writers import Count, SumAndMax
 
 from nexus_pixel_man_test_data import Man2DDataSource, ManData
 
@@ -105,7 +105,8 @@ def nx_file():
     if filename.exists():
         filename.unlink()
     yield filename
-    filename.unlink()
+    if filename.exists():
+        filename.unlink()
 
 
 def get_dataset_total_and_used_chunks(fle, name):
@@ -426,3 +427,46 @@ def test_multi_binned(
             should_be_sparse=chunk_max_byte_count == 240 * 2,
             has_counts=True,
         )
+
+
+def test_sum_and_max_failure(nx_file, man_data):
+    man_data_source = Man2DDataSource(
+        man_data,
+        supplementary_axes=[
+            Axis("x", 0, np.float32, "m"),
+            Axis("y", 1, np.float32, "m"),
+            Axis("mz", 2, np.float32, "m"),
+        ],
+        multipliers={"x": 0.1, "y": 0.2, "mz": 0.3},
+        extra_accumulations=[SumAndMax("failing", ["DNE"])],
+    )
+
+    process_args = data_convert.ProcessArgs(
+        out_path=nx_file,
+        chunk_max_byte_count=1024 * 1024,
+        memory_max_byte_count=1024 * 1024 * 1024,
+        data_source=man_data_source,
+    )
+    with pytest.raises(UnknownAxisError):
+        data_convert.process(process_args, {})
+
+
+def test_dry_run(nx_file, man_data):
+    man_data_source = Man2DDataSource(
+        man_data,
+        supplementary_axes=[
+            Axis("time", 0, np.int16, "s"),
+            Axis("error", 2, np.int16, ""),
+        ],
+    )
+
+    process_args = data_convert.ProcessArgs(
+        out_path=nx_file,
+        chunk_max_byte_count=1024 * 1024,
+        memory_max_byte_count=1024 * 1024 * 1024,
+        data_source=man_data_source,
+        dry_run=True,
+    )
+    data_convert.process(process_args, {})
+
+    assert not nx_file.exists()
