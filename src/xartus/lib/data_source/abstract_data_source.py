@@ -119,9 +119,10 @@ class AbstractDataSource(AbstractContextManager):
         These are implementations of Abstract writers.
         For example, with simple image data (x,y, spectra):
         return [
-            SumAndMax('total_images', axes= ['mz']), # Accumulate over the spectra
-            SumAndMax('total_spectra', axes=['x','y']) # Accumulate over the images
+        SumAndMax("total_images", axes= ["mz"]), # Accumulate over the spectra
+        SumAndMax("total_spectra", axes=["x","y"]), # Accumulate over the images
         ]
+
         """
 
     @abstractmethod

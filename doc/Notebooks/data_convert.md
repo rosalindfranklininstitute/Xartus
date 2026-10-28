@@ -40,7 +40,8 @@ from typing import Any, Callable
 import datetime as dt
 
 from xartus.lib import Shape, Chunk
-from xartus.lib import AbstractDataSource, Axis, Signal, AxisType, DataShape
+from xartus.lib import AbstractDataSource, Axis, Signal, DataShape
+from xartus.lib.writers import AbstractWriter, SumAndMax
 from xartus.lib import MultiCOO
 
 
@@ -57,42 +58,39 @@ class HummingbirdSource(AbstractDataSource):
     def instrument_metadata(self) -> dict[str, Any]:
         return {"name": "Notebook"}
 
+    def user_metadata(self) -> dict[str, Any]:
+        return {"name": "Example user"}
+
     def experiment_metadata(self) -> dict[str, Any]:
         return {"date": dt.datetime.now().strftime("%Y-%m-%d %H:%M")}
 
     def shape(self) -> DataShape:
-        return DataShape(self.data.shape, is_sparse=False, worst_case_density=1.0)
+        return DataShape(self.data.shape, worst_case_density=1.0)
 
     def signal_definition(self) -> Signal:
         return Signal("pixels", np.float32, units=None)
 
-    def output_chunks(self) -> dict[str, Shape]:
+    def output_chunk_priorities(self) -> dict[str, Shape]:
         return {"pixels": (2, 2, 1)}
-
-    def read_chunks(self) -> list[Shape] | None:
-        return None
 
     def chunk_read_count(self, memory_chunk: Shape) -> int:
         return np.prod(memory_chunk)
 
     def axis_definitions(self) -> list[Axis]:
         return [
-            Axis("y", 0, AxisType.EXACT, np.int8, units="pix"),
-            Axis("x", 1, AxisType.EXACT, np.int8, units="pix"),
-            Axis("colour", 2, AxisType.EXACT, np.int8, units="intens"),
+            Axis("y", 0, np.int8, units="pix"),
+            Axis("x", 1, np.int8, units="pix"),
+            Axis("colour", 2, np.int8, units="intens"),
         ]
 
-    def exact_axis_values(self, axis: Axis) -> np.ndarray:
+    def axis_values(self, axis: Axis) -> np.ndarray:
         return np.arange(self.data.shape[axis.primary_axis], dtype=np.int8)
 
-    def binned_axis_edges(self, axis: Axis) -> np.ndarray:
-        raise NotImplementedError()
-
-    def output_accumulations(self) -> dict[str, tuple[str, ...]]:
-        return {
-            "total_image": ("col",),
-            "total_colour": ("x", "y"),
-        }
+    def output_accumulations(self) -> list[AbstractWriter]:
+        return [
+            SumAndMax("total_image", ["colour"]),
+            SumAndMax("total_colour", ["x", "y"]),
+        ]
 
     def fill_chunk(
         self,
@@ -111,7 +109,6 @@ from xartus.api import data_convert
 out_path = Path('./out.nxs')
 
 process_args = data_convert.ProcessArgs(
-    in_path=filename,
     out_path=out_path,
     chunk_max_byte_count=1024 * 1024,
     memory_max_byte_count=1024 * 1024 * 1024,
