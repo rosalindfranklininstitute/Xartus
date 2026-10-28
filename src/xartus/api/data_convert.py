@@ -235,30 +235,42 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
     signal_writers.sort(key=lambda w: w.chunking_name)
 
     extra_writers = args.data_source.output_accumulations()
+    all_writers = [*signal_writers, *extra_writers]
 
     size_per_signal_item = np.dtype(signal_definition.dtype).itemsize
+    max_items_per_chunk = int(
+        args.field_options.max_bytes_per_chunk / size_per_signal_item
+    )
 
     axis_definitions = args.data_source.axis_definitions()
-    signal_chunkers: list[Chunker] = [
-        writer.init_chunker(
+    writer_shapes = [
+        writer.init_shape_and_priorities(
             full_shape,
-            signal_definition.dtype,
-            args.field_options.max_bytes_per_chunk,
             axis_definitions,
         )
-        for writer in signal_writers
+        for writer in all_writers
     ]
+
     memory_max_item_count = int(args.memory_max_byte_count / size_per_signal_item)
+
+    all_chunkers: list[Chunker] = [
+        Chunker.from_max_item_count(
+            data_shape=shape,
+            priorities=priorities,
+            items_per_chunk=max_items_per_chunk,
+        )
+        for shape, priorities in writer_shapes
+    ]
 
     memory_chunker, total_read_count, default_inx = choose_memory_buffer(
         args.data_source.read_chunks(),
         memory_max_item_count,
         density,
-        signal_chunkers,
+        all_chunkers[0 : len(signal_writers)],
         args.data_source.chunk_read_count,
     )
     signal_writers.insert(0, signal_writers.pop(default_inx))
-    signal_chunkers.insert(0, signal_chunkers.pop(default_inx))
+    all_chunkers.insert(0, all_chunkers.pop(default_inx))
 
     logger.info(
         f" Giving a final data shape of {full_shape} (Raw {format_bytes(np.prod(full_shape) * size_per_signal_item)})",
@@ -279,27 +291,17 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
         f"maximum chunk size ({format_bytes(args.field_options.max_bytes_per_chunk)})",
     )
     logger.info("Signal data:")
-    for writer, chunker in zip(signal_writers, signal_chunkers, strict=True):
+    for ii, (writer, chunker) in enumerate(zip(all_writers, all_chunkers, strict=True)):
+        if ii == 0:
+            logger.info("Signal data:")
+        elif ii == len(signal_writers):
+            logger.info("Additional data:")
+        size_per_item = np.dtype(writer.dtype(signal_definition.dtype)).itemsize
         logger.info(
-            f"    {writer.chunking_name: >10}: chunk shape {chunker.chunk_shape} and total count {chunker.chunk_count} and memory count {count_chunks_to_cover(memory_chunker.chunk_shape, chunker.chunk_shape)}.",
+            f"    {writer.name(): >10}: chunk shape {chunker.chunk_shape} and total count {chunker.chunk_count} and memory count {count_chunks_to_cover(memory_chunker.chunk_shape, chunker.chunk_shape)}.",
         )
         logger.info(
-            f"    {' ' * 10}: chunk size: {np.prod(chunker.chunk_shape)} items ({format_bytes(np.prod(chunker.chunk_shape) * size_per_signal_item)}).",
-        )
-
-    logger.info("Additional data:")
-    for writer in extra_writers:
-        chunker = writer.init_chunker(
-            full_shape,
-            signal_definition.dtype,
-            args.field_options.max_bytes_per_chunk,
-            axis_definitions,
-        )
-        logger.info(
-            f"    {writer.name: >10}: chunk shape {chunker.chunk_shape} and total count {chunker.chunk_count} and memory count {count_chunks_to_cover(memory_chunker.chunk_shape, chunker.chunk_shape)}.",
-        )
-        logger.info(
-            f"    {' ' * 10}: chunk size: {np.prod(chunker.chunk_shape)} items ({format_bytes(np.prod(chunker.chunk_shape) * size_per_signal_item)}).",
+            f"    {' ' * 10}: chunk size: {np.prod(chunker.chunk_shape)} items ({format_bytes(np.prod(chunker.chunk_shape) * size_per_item)}).",
         )
 
     if args.dry_run:
@@ -320,10 +322,14 @@ def process(args: ProcessArgs, config: dict[str, Any] = {}) -> None:
 
         nxs.entry.attrs["default"] = "data"
 
-        all_writers = [*signal_writers, *extra_writers]
-        for writer in all_writers:
+        for writer, chunker in zip(all_writers, all_chunkers, strict=True):
             writer.init_field(
-                nxs, full_shape, axes, signal_definition.dtype, args.field_options
+                nxs,
+                full_shape,
+                axes,
+                signal_definition.dtype,
+                args.field_options,
+                chunker,
             )
 
         with tqdm(

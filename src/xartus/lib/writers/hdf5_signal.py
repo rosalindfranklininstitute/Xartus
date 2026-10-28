@@ -35,26 +35,20 @@ class HDF5ChunkedSignalWriter(AbstractWriter):
         self.units = units
 
     @override
+    def name(self) -> str:
+        return self.chunking_name
+
+    @override
     def supports_filetype(self, typ) -> bool:
         return typ is NexusFile
 
     @override
-    def init_chunker(
+    def init_shape_and_priorities(
         self,
         data_shape: Shape,
-        signal_dtype: npt.DTypeLike,
-        max_bytes_per_chunk: int,
         axes: list[Axis],
-    ) -> Chunker:
-        signal_item_width = np.dtype(signal_dtype).itemsize
-        max_items_per_chunk = int(max_bytes_per_chunk / signal_item_width)
-        self.chunker = Chunker.from_max_item_count(
-            data_shape=data_shape,
-            priorities=self.chunk_priorities,
-            items_per_chunk=max_items_per_chunk,
-        )
-
-        return self.chunker
+    ) -> tuple[Shape, tuple[int, ...]]:
+        return data_shape, self.chunk_priorities
 
     @override
     def init_field(
@@ -64,6 +58,7 @@ class HDF5ChunkedSignalWriter(AbstractWriter):
         axes: NxAxes,
         signal_dtype: npt.DTypeLike,
         field_options: FieldOptions,
+        chunker: Chunker,
     ) -> None:
         assert isinstance(file, NexusFile)
         self.nxs = file
@@ -82,7 +77,7 @@ class HDF5ChunkedSignalWriter(AbstractWriter):
             shape=data_shape,
             compression=field_options.compression,
             compression_opts=field_options.compression_opts,
-            chunks=self.chunker.chunk_shape,
+            chunks=chunker.chunk_shape,
             shuffle=field_options.shuffle,
         )
         axes.add_to_group(signal_group)

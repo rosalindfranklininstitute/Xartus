@@ -19,22 +19,35 @@ from xartus.lib.data_source import Axis
 
 class AbstractWriter(ABC):
     @abstractmethod
+    def name(self) -> str:
+        """
+        Return the name of the writer. This is used by the converyer in log messages.
+        """
+
+    @abstractmethod
     def supports_filetype(self, typ: type) -> bool:
         """
         Returns the file types that this wrier supports.
         """
 
     @abstractmethod
-    def init_chunker(
+    def init_shape_and_priorities(
         self,
         data_shape: Shape,
-        signal_dtype: npt.DTypeLike,
-        max_bytes_per_chunk: int,
         axes: list[Axis],
-    ) -> Chunker:
+    ) -> tuple[Shape, tuple[int, ...]]:
         """
-        This method should initialise the chunker for this writer and return it.
+        This should return the shape and chunking priorities of the data that this writer will write.
         """
+
+    def dtype(
+        self,
+        signal_dtype: npt.DTypeLike,
+    ) -> npt.DTypeLike:
+        """
+        This should return the dtype that the data will be written with.
+        """
+        return signal_dtype
 
     @abstractmethod
     def init_field(
@@ -44,6 +57,7 @@ class AbstractWriter(ABC):
         axes: NxAxes,
         signal_dtype: npt.DTypeLike,
         field_options: FieldOptions,
+        chunker: Chunker,
     ) -> None:
         """
         This should initialise the appropriate field in the given file.

@@ -30,21 +30,23 @@ class SumAndMax(AbstractWriter):
         name: str,
         axes: list[str],
     ):
-        self.name = name
+        self.group_name = name
         self.axes = axes
+
+    @override
+    def name(self) -> str:
+        return self.group_name
 
     @override
     def supports_filetype(self, typ) -> bool:
         return typ is NexusFile
 
     @override
-    def init_chunker(
+    def init_shape_and_priorities(
         self,
         data_shape: Shape,
-        signal_dtype: npt.DTypeLike,
-        max_bytes_per_chunk: int,
         axes: list[Axis],
-    ) -> Chunker:
+    ) -> tuple[Shape, tuple[int, ...]]:
 
         axis_to_accumulate: Bool1D = np.full(shape=(len(data_shape),), fill_value=False)
         edges = []
@@ -97,7 +99,7 @@ class SumAndMax(AbstractWriter):
         self.field_shape = (2, *self.acc_shape)
         self.data_shape = data_shape
 
-        return Chunker.from_chunk_shape(self.field_shape, self.field_shape)
+        return self.field_shape, tuple(1 for _ in self.field_shape)
 
     @override
     def init_field(
@@ -107,6 +109,7 @@ class SumAndMax(AbstractWriter):
         axes: NxAxes,
         signal_dtype: npt.DTypeLike,
         field_options: FieldOptions,
+        chunker: Chunker,
     ) -> None:
         assert isinstance(file, NexusFile)
         self.nxs = file
@@ -114,11 +117,11 @@ class SumAndMax(AbstractWriter):
             data_group = create_nxgroup(
                 self.nxs.entry, "accumulations", nx_class="NXsubentry"
             )
-            data_group.attrs["default"] = self.name
+            data_group.attrs["default"] = self.group_name
         else:
             data_group = self.nxs.entry["accumulations"]
 
-        acc_group = create_nxgroup(data_group, self.name, nx_class="NXdata")
+        acc_group = create_nxgroup(data_group, self.group_name, nx_class="NXdata")
         acc_group.attrs["signal"] = "signal"
 
         axis_dict = {ax.name: ax for dim_axes in axes for ax in dim_axes}
@@ -134,7 +137,7 @@ class SumAndMax(AbstractWriter):
             shape=(2, *self.acc_shape),
             compression=field_options.compression,
             compression_opts=field_options.compression_opts,
-            chunks=None,
+            chunks=chunker.chunk_shape,
             shuffle=field_options.shuffle,
             fillvalue=0,
         )
@@ -189,7 +192,7 @@ class SumAndMax(AbstractWriter):
     def finalise(self) -> None:
         if self.has_data:
             extra_slices = [slice(None) for _ in range(len(self.acc_shape))]
-            acc_group = self.nxs.entry[f"accumulations/{self.name}"]
+            acc_group = self.nxs.entry[f"accumulations/{self.group_name}"]
             signal_name = acc_group.attrs["signal"]
             acc_group[signal_name][0, *extra_slices] = self.sum_data
             acc_group[signal_name][1, *extra_slices] = self.max_data
