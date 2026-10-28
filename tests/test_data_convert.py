@@ -470,3 +470,129 @@ def test_dry_run(nx_file, man_data):
     data_convert.process(process_args, {})
 
     assert not nx_file.exists()
+
+
+def test_instrument_metadata(nx_file, man_data):
+    man_data_source = Man2DDataSource(
+        man_data,
+        supplementary_axes=[
+            Axis("time", 0, np.int16, "s"),
+            Axis("error", 2, np.int16, ""),
+        ],
+        instrument_supplementary_metadata={
+            "char": "a",
+            "str": "Sphinx of black quartz, judge my vow!",
+            "list": [1, 2, 3],
+            "nested": {
+                "A": "a",
+                "B": "b",
+            },
+        },
+    )
+
+    process_args = data_convert.ProcessArgs(
+        out_path=nx_file,
+        chunk_max_byte_count=1024 * 1024,
+        memory_max_byte_count=1024 * 1024 * 1024,
+        data_source=man_data_source,
+    )
+    data_convert.process(process_args, {})
+
+    with h5py.File(nx_file, "r") as fle:
+        assert "/entry/instrument/" in fle
+        instrument = fle["/entry/instrument/"]
+        assert "char" in instrument.attrs
+        assert instrument.attrs["char"] == "a"
+        assert instrument.attrs["str"] == "Sphinx of black quartz, judge my vow!"
+        np.testing.assert_allclose(instrument.attrs["list"], [1, 2, 3])
+
+        assert "/entry/instrument/nested/" in fle
+        nested = fle["/entry/instrument/nested"]
+
+        assert "A" in nested.attrs
+        assert nested.attrs["A"] == "a"
+        assert nested.attrs["B"] == "b"
+
+
+def test_experimental_metadata(nx_file, man_data):
+    man_data_source = Man2DDataSource(
+        man_data,
+        supplementary_axes=[
+            Axis("time", 0, np.int16, "s"),
+            Axis("error", 2, np.int16, ""),
+        ],
+        experiment_supplementary_metadata={
+            "char": "a",
+            "str": "Sphinx of black quartz, judge my vow!",
+            "list": [1, 2, 3],
+            "nested": {
+                "A": "a",
+                "B": "b",
+            },
+        },
+    )
+
+    process_args = data_convert.ProcessArgs(
+        out_path=nx_file,
+        chunk_max_byte_count=1024 * 1024,
+        memory_max_byte_count=1024 * 1024 * 1024,
+        data_source=man_data_source,
+    )
+    data_convert.process(process_args, {})
+
+    with h5py.File(nx_file, "r") as fle:
+        assert "/entry/experiment/" in fle
+        experiment = fle["/entry/experiment/"]
+        assert "char" in experiment.attrs
+        assert experiment.attrs["char"] == "a"
+        assert experiment.attrs["str"] == "Sphinx of black quartz, judge my vow!"
+        np.testing.assert_allclose(experiment.attrs["list"], [1, 2, 3])
+
+        assert "/entry/experiment/nested/" in fle
+        nested = fle["/entry/experiment/nested"]
+
+        assert "A" in nested.attrs
+        assert nested.attrs["A"] == "a"
+        assert nested.attrs["B"] == "b"
+
+
+def test_user_metadata(nx_file, man_data):
+    man_data_source = Man2DDataSource(
+        man_data,
+        supplementary_axes=[
+            Axis("time", 0, np.int16, "s"),
+            Axis("error", 2, np.int16, ""),
+        ],
+        user_supplementary_metadata={
+            "char": "a",
+            "str": "Sphinx of black quartz, judge my vow!",
+            "list": [1, 2, 3],
+            "nested": {
+                "A": "a",
+                "B": "b",
+            },
+        },
+    )
+
+    process_args = data_convert.ProcessArgs(
+        out_path=nx_file,
+        chunk_max_byte_count=1024 * 1024,
+        memory_max_byte_count=1024 * 1024 * 1024,
+        data_source=man_data_source,
+    )
+    data_convert.process(process_args, {})
+
+    with h5py.File(nx_file, "r") as fle:
+        assert "/entry/user/" in fle
+        user = fle["/entry/user/"]
+        assert "char" in user
+        assert user["char"][()] == b"a"
+        assert user["str"][()] == b"Sphinx of black quartz, judge my vow!"
+        np.testing.assert_allclose(user["list"][:], [1, 2, 3])
+
+        assert "/entry/user/nested/" in fle
+        nested = fle["/entry/user/nested"]
+
+        assert "A" in nested
+        assert nested["A"][()] == b"a"
+        assert nested["B"][()] == b"b"

@@ -198,7 +198,7 @@ def add_items_to_group(items: dict[str, Any], root, as_attributes=True) -> None:
         if isinstance(value, dict):
             if key not in root:
                 create_nxgroup(root, key)
-            add_items_to_group(value, root[key])
+            add_items_to_group(value, root[key], as_attributes)
         else:
             if as_attributes:
                 root.attrs[key] = value
