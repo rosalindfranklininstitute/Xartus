@@ -1770,7 +1770,7 @@ wheels = [
 
 [[package]]
 name = "xartus"
-version = "0.4.3"
+version = "0.5.0"
 source = { editable = "." }
 default-groups = ["dev", "doc"]
 dependencies = [

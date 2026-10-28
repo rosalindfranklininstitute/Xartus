@@ -232,7 +232,7 @@ class NexusDataset:
     def write_to(
         self,
         filename_or_obj: Path | h5py.File,
-        entry_path: str = "/",
+        entry_path: str = "/entry",
         signal_name: None | ArraySignalName = None,
     ) -> None:
         """
@@ -281,7 +281,7 @@ class NexusDataset:
     def write_into(
         self,
         filename_or_obj: Path | h5py.File,
-        entry_path: str = "/",
+        entry_path: str = "/entry",
         signal_name: None | ArraySignalName = None,
     ) -> None:
         """
