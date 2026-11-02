@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: LicenseRef-RFI-Apache-2.0-Commons-clause
 
 from typing import Any, override
+from enum import Enum
 from contextlib import AbstractContextManager
 import time
 import json
@@ -11,6 +12,12 @@ from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class ExceptionAction(Enum):
+    RERAISE = "reraise"
+    SUPPRESS_AND_IGNORE = "suppress_and_ignore"
+    SUPPRESS_AND_STORE = "suppress_and_store"
 
 
 class JSONTimerSkip(Exception):  # noqa: N818
@@ -23,7 +30,7 @@ class JSONTimer(AbstractContextManager):
         filename: Path,
         keys: Iterable[str],
         print_borders=False,
-        suppress_exceptions=False,
+        suppress_exceptions=ExceptionAction.RERAISE,
     ):
         self.filename = filename
         self.keys = keys
@@ -52,7 +59,13 @@ class JSONTimer(AbstractContextManager):
             if self.print_borders:
                 logger.info(f"Error: {'.'.join(self.keys)}")
                 logger.error(f"{exc_type}: {exc_value}")
-            return self.suppress_exceptions
+            match self.suppress_exceptions:
+                case ExceptionAction.RERAISE:
+                    return False
+                case ExceptionAction.SUPPRESS_AND_IGNORE:
+                    return True
+                case _:
+                    pass
 
         end = time.monotonic()
         duration = end - self._start
@@ -65,14 +78,22 @@ class JSONTimer(AbstractContextManager):
             if key not in new_data:
                 new_data[key] = {}
             new_data = new_data[key]
-        new_data["duration"] = duration
+
+        if exc_type is not None:
+            assert self.suppress_exceptions is ExceptionAction.SUPPRESS_AND_STORE
+            new_data["duration"] = f"{exc_type}: {exc_value}"
+        else:
+            new_data["duration"] = duration
+
         new_data.update(self._data)
         with open(self.filename, "w") as fd:
             json.dump(old_data, fd, indent=2)
 
-        if self.print_borders:
-            logger.info(f"Completed: {'.'.join(self.keys)}: {duration}s")
+        if exc_type is not None:
+            assert self.suppress_exceptions is ExceptionAction.SUPPRESS_AND_STORE
+            return True
 
+        logger.info(f"Completed: {'.'.join(self.keys)}: {duration}s")
         return False
 
     def skip_if_present(self) -> None:
@@ -91,6 +112,9 @@ class JSONTimer(AbstractContextManager):
         skip = skip and "duration" in new_data
         if skip:
             raise JSONTimerSkip()
+
+    def skip() -> None:
+        raise JSONTimerSkip()
 
     def add_user_data(self, /, **kwargs) -> None:
         self._data.update(kwargs)
